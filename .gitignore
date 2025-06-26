@@ -1,0 +1,13 @@
+# Ignore all
+/*
+
+# Exceptions
+!.github/
+!.gitignore
+!example.csv
+!libxa_deinterleaver.hxx
+!libxa_interleaver.hxx
+!LICENSE
+!README.md
+!xa-deinterleaver.cxx
+!xa-interleaver.cxx

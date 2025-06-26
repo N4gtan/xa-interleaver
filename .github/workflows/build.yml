@@ -1,0 +1,92 @@
+name: Build and Release
+on:   [ push, pull_request ]
+
+jobs:
+  build-windows:
+    name:    Build Windows binaries
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    - name: Set up MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Build and package xa-interleaver
+      run: |
+        cl /std:c++17 /O2 /EHsc /Fexa-interleaver xa-interleaver.cxx
+        cl /std:c++17 /O2 /EHsc /Fexa-deinterleaver xa-deinterleaver.cxx
+        Compress-Archive -Path example.csv,xa-interleaver.exe,xa-deinterleaver.exe -DestinationPath xa-interleaver-${{ github.ref_name }}-windows.zip
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows
+        path: |
+          xa-interleaver-${{ github.ref_name }}-windows.zip
+
+  build-linux:
+    name:    Build Linux binaries
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    - name: Build and package xa-interleaver
+      run: |
+        clang++ -std=c++17 -O2 -o xa-interleaver xa-interleaver.cxx
+        clang++ -std=c++17 -O2 -o xa-deinterleaver xa-deinterleaver.cxx
+        zip xa-interleaver-${{ github.ref_name }}-linux.zip example.csv xa-interleaver xa-deinterleaver
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux
+        path: |
+          xa-interleaver-${{ github.ref_name }}-linux.zip
+
+  build-macos:
+    name:    Build macOS binaries
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    - name: Build and package xa-interleaver
+      run: |
+        clang++ -std=c++17 -O2 -o xa-interleaver xa-interleaver.cxx
+        clang++ -std=c++17 -O2 -o xa-deinterleaver xa-deinterleaver.cxx
+        zip xa-interleaver-${{ github.ref_name }}-macos.zip example.csv xa-interleaver xa-deinterleaver
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos
+        path: |
+          xa-interleaver-${{ github.ref_name }}-macos.zip
+
+  # This job takes care of creating a new release and upload the build
+  # artifacts if the last commit is associated to a tag.
+  create-release:
+    name:    Create release
+    runs-on: ubuntu-latest
+    needs:   [ build-windows, build-linux, build-macos ]
+
+    steps:
+    - name: Fetch build artifacts
+      if:   ${{ github.ref_type == 'tag' }}
+      uses: actions/download-artifact@v4
+
+    - name: Publish release
+      if:   ${{ github.ref_type == 'tag' }}
+      uses: softprops/action-gh-release@v2
+      with:
+        fail_on_unmatched_files: true
+        #generate_release_notes:  true
+        files: |
+          windows/*
+          linux/*
+          macos/*
