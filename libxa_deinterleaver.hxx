@@ -1,8 +1,5 @@
 #pragma once
 
-#define CD_SECTOR_SIZE 2352
-#define XA_DATA_SIZE 2336
-
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -10,6 +7,10 @@
 
 class deinterleaver
 {
+protected:
+    static constexpr int CD_SECTOR_SIZE = 2352;
+    static constexpr int XA_DATA_SIZE = 2336;
+
     struct FileInfo
     {
         std::string fileName = std::string(256, '\0');
@@ -23,6 +24,7 @@ class deinterleaver
         std::streampos endPos;
     };
 
+private:
     unsigned char buffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
     int offset;
     int inputSectorSize;
@@ -115,6 +117,25 @@ class deinterleaver
         return inputFile.tellg();
     }
 
+    // Virtual function to fill the manifest as needed.
+    virtual void createManifest(const std::filesystem::path &outputDir, const std::string &fileName)
+    {
+        std::ofstream manifest(outputDir / fileName);
+        if (!manifest)
+        {
+            printf("Error: Cannot write manifest file.\n");
+            return;
+        }
+
+        for (const FileInfo &entry : entries)
+        {
+            manifest << entry.sectorBlock << "," << (inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd")
+                     << "," << entry.fileName << "," << entry.nullTermination << "," << entry.filenum << "," << entry.channel
+                     /*<< "," << entry.begSec << "-" << entry.endPos / inputSectorSize - entry.sectorStride - 1*/ << "\n";
+        }
+        manifest.close();
+    }
+
 public:
     std::vector<FileInfo> entries;
 
@@ -173,13 +194,6 @@ public:
         if (!std::filesystem::exists(outputDir))
             std::filesystem::create_directories(outputDir);
 
-        std::ofstream manifest(outputDir / (inputPath.stem().string() + ".csv"));
-        if (!manifest)
-        {
-            printf("Error: Cannot write manifest file.\n");
-            return;
-        }
-
         for (const FileInfo &entry : entries)
         {
             std::ofstream outputFile(outputDir / entry.fileName, std::ios::binary);
@@ -209,11 +223,8 @@ public:
 
             outputFile.close();
             printf("Done\n");
-
-            manifest << entry.sectorBlock << "," << (sectorSize == XA_DATA_SIZE ? "xa" : "xacd")
-            << "," << entry.fileName << "," << entry.nullTermination << "," << entry.filenum << "," << entry.channel
-            /*<< "," << entry.begSec << "-" << entry.endPos / sectorSize - entry.sectorStride - 1*/ << "\n";
         }
-        manifest.close();
+
+        createManifest(outputDir, inputPath.stem().string() + ".csv");
     }
 };

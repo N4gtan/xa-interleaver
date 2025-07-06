@@ -3,10 +3,7 @@
 
 #pragma once
 
-#define CD_SECTOR_SIZE 2352
-#define XA_DATA_SIZE 2336
-
-#ifdef _WIN32
+#ifdef _MSC_VER
     #define strtok_r strtok_s
     #define strcasecmp _stricmp
     #include <string>
@@ -20,6 +17,10 @@
 
 class interleaver
 {
+protected:
+    static constexpr int CD_SECTOR_SIZE = 2352;
+    static constexpr int XA_DATA_SIZE = 2336;
+
     struct FileInfo
     {
         int sectorBlock = 1;
@@ -34,7 +35,17 @@ class interleaver
         int endSec;
     };
 
+private:
     const int sectorStride;
+
+    // Virtual function to fill null sectors as needed.
+    virtual void nullCustomizer(unsigned char *emptyBuffer, FileInfo &entry)
+    {
+        emptyBuffer[0x010] = emptyBuffer[0x014] = entry.filenum.value_or(emptyBuffer[0x014]);
+        //emptyBuffer[0x011] = emptyBuffer[0x015] = entry.nullTermination > 0 ? entry.channel.value_or(0) : 0;
+        //emptyBuffer[0x012] = emptyBuffer[0x016] = 0x48;
+        //emptyBuffer[0x013] = emptyBuffer[0x017] = 0x00;
+    }
 
 public:
     std::vector<FileInfo> entries;
@@ -151,7 +162,7 @@ public:
 
     // outputFile must be opened in read and write binary (w+b) mode.
     // sectorSize must be 2336 or 2352 to change the output size.
-    void interleave(std::fstream &outputFile, int sectorSize = 0, const bool nullWithCH = false)
+    void interleave(std::fstream &outputFile, int sectorSize = 0)
     {
         unsigned char buffer[CD_SECTOR_SIZE];
         unsigned char emptyBuffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
@@ -204,12 +215,7 @@ public:
                     }
                     else
                     {
-                        emptyBuffer[0x10] = emptyBuffer[0x14] = entry.filenum.value_or(emptyBuffer[0x14]);
-                        if (nullWithCH)
-                        {
-                            emptyBuffer[0x11] = emptyBuffer[0x15] = inputFile.is_open() ? entry.channel.value_or(0) : 0;
-                            emptyBuffer[0x12] = emptyBuffer[0x16] = 0x48;
-                        }
+                        nullCustomizer(emptyBuffer, entry);
                         outputFile.write(reinterpret_cast<const char*>(emptyBuffer) + outOffset, sectorSize);
                     }
                 }
