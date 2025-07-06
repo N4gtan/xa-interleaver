@@ -1,10 +1,11 @@
 #include "libxa_interleaver.hxx"
+#define VER "VERSION"
 
 int main(int argc, char *argv[])
 {
     if (argc < 2)
     {
-        printf("xa-interleaver v1.0 by N4gtan\n\n");
+        printf("xa-interleaver " VER " by N4gtan\n\n");
         printf("    Usage: xa-interleaver <input> <stride> <2336/2352> <output>\n\n");
         printf("    Input: Manifest .csv file (or any text file with the appropriate format)\n");
         printf("   Stride: Stride of sectors to interleave. Defaults to 8\n");

@@ -15,6 +15,7 @@ jobs:
 
     - name: Build and package xa-interleaver
       run: |
+        @('xa-interleaver.cxx','xa-deinterleaver.cxx') | ForEach-Object { (Get-Content $_ -Raw) -replace 'VERSION', "${{ github.ref_name }}" | Set-Content $_ -NoNewline }
         cl /std:c++17 /O2 /EHsc /Fexa-interleaver xa-interleaver.cxx
         cl /std:c++17 /O2 /EHsc /Fexa-deinterleaver xa-deinterleaver.cxx
         Compress-Archive -Path example.csv,xa-interleaver.exe,xa-deinterleaver.exe -DestinationPath xa-interleaver-${{ github.ref_name }}-windows.zip
@@ -36,6 +37,7 @@ jobs:
 
     - name: Build and package xa-interleaver
       run: |
+        for file in xa-interleaver.cxx xa-deinterleaver.cxx; do perl -pi -e "s/VERSION/${{ github.ref_name }}/g" "$file"; done
         clang++ -std=c++17 -O2 -o xa-interleaver xa-interleaver.cxx
         clang++ -std=c++17 -O2 -o xa-deinterleaver xa-deinterleaver.cxx
         zip xa-interleaver-${{ github.ref_name }}-linux.zip example.csv xa-interleaver xa-deinterleaver
@@ -57,6 +59,7 @@ jobs:
 
     - name: Build and package xa-interleaver
       run: |
+        for file in xa-interleaver.cxx xa-deinterleaver.cxx; do perl -pi -e "s/VERSION/${{ github.ref_name }}/g" "$file"; done
         clang++ -std=c++17 -O2 -o xa-interleaver xa-interleaver.cxx
         clang++ -std=c++17 -O2 -o xa-deinterleaver xa-deinterleaver.cxx
         zip xa-interleaver-${{ github.ref_name }}-macos.zip example.csv xa-interleaver xa-deinterleaver

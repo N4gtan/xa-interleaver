@@ -1,10 +1,11 @@
 #include "libxa_deinterleaver.hxx"
+#define VER "VERSION"
 
 int main(int argc, char *argv[])
 {
     if (argc < 2)
     {
-        printf("xa-deinterleaver v1.0 by N4gtan\n\n");
+        printf("xa-deinterleaver " VER " by N4gtan\n\n");
         printf("    Usage: xa-deinterleaver <input> <2336/2352> <output>\n\n");
         printf("    Input: XA interleaved file\n");
         printf("2336/2352: Output file sector size (2336 or 2352). Defaults to input file sector size\n");
