@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef _MSC_VER
+    #include <string>
+#endif
+
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -39,7 +43,7 @@ private:
             entry.filenum = buffer[0x10];
             entry.channel = buffer[0x11];
             entry.begSec = (begPos -= inputSectorSize) / inputSectorSize;
-            entry.fileName = entries.size() - 1;
+            entry.fileName = std::to_string(entries.size() - 1);
             /*entry.fileName = inputPath.stem().string() + "_"
                             + std::string(std::max(static_cast<int>(sizeof("00") - entry.fileName.length()), 0), '0')
                             + std::move(entry.fileName) + ".xa";
@@ -203,7 +207,7 @@ public:
             std::filesystem::create_directories(outputDir);
 
         std::string namePrefix = inputPath.stem().string() + "_";
-        size_t namePadWidth = std::max(std::to_string(entries.size() - 1).length(), 2zu);
+        size_t namePadWidth = std::max(std::to_string(entries.size() - 1).length(), (std::size_t)2);
         for (FileInfo &entry : entries)
         {
             entry.fileName = namePrefix + std::string(namePadWidth - entry.fileName.length(), '0') + std::move(entry.fileName) + ".xa";
