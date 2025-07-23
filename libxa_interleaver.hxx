@@ -42,7 +42,7 @@ private:
     virtual void nullCustomizer(unsigned char *emptyBuffer, FileInfo &entry)
     {
         emptyBuffer[0x010] = emptyBuffer[0x014] = entry.filenum.value_or(emptyBuffer[0x014]);
-        //emptyBuffer[0x011] = emptyBuffer[0x015] = entry.nullTermination > 0 ? entry.channel.value_or(0) : 0;
+        //emptyBuffer[0x011] = emptyBuffer[0x015] = entry.nullTermination >= 0 ? entry.channel.value_or(0) : 0;
         //emptyBuffer[0x012] = emptyBuffer[0x016] = 0x48;
         //emptyBuffer[0x013] = emptyBuffer[0x017] = 0x00;
     }

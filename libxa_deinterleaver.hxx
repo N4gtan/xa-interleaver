@@ -13,7 +13,7 @@ protected:
 
     struct FileInfo
     {
-        std::string fileName = std::string(256, '\0');
+        std::string fileName;
         int sectorBlock;
         int sectorCount = 0;
         int sectorStride = 0;
@@ -39,10 +39,12 @@ private:
             entry.filenum = buffer[0x10];
             entry.channel = buffer[0x11];
             entry.begSec = (begPos -= inputSectorSize) / inputSectorSize;
-            snprintf(entry.fileName.data(), entry.fileName.size(), "%s_FN-%d_%03zu.xa", inputPath.stem().string().c_str(), entry.filenum, entries.size() - 1);
-            entry.fileName.resize(strlen(entry.fileName.c_str()));
+            entry.fileName = entries.size() - 1;
+            /*entry.fileName = inputPath.stem().string() + "_"
+                            + std::string(std::max(static_cast<int>(sizeof("00") - entry.fileName.length()), 0), '0')
+                            + std::move(entry.fileName) + ".xa";
 
-            /*if (!std::filesystem::exists(outputDir))
+            if (!std::filesystem::exists(outputDir))
                 std::filesystem::create_directories(outputDir);
             std::ofstream outputFile(outputDir / entry.fileName, std::ios::binary);
             if (!outputFile)
@@ -123,7 +125,7 @@ private:
         std::ofstream manifest(outputDir / fileName);
         if (!manifest)
         {
-            printf("Error: Cannot write manifest file.\n");
+            fprintf(stderr, "Error: Cannot write manifest file.\n");
             return;
         }
 
@@ -180,12 +182,18 @@ public:
             }
         }
         inputFile.close();
+
+        if (entries.empty())
+            printf("No valid entries found in the input file.\n");
     }
 
     // outputDir must be a directory (not a file).
     // sectorSize must be 2336 or 2352 to change the output size.
     void deinterleave(const std::filesystem::path outputDir, int sectorSize = 0)
     {
+        if (entries.empty())
+            return;
+
         std::ifstream inputFile(inputPath, std::ios::binary);
         if (!sectorSize)
             sectorSize = inputSectorSize;
@@ -194,12 +202,15 @@ public:
         if (!std::filesystem::exists(outputDir))
             std::filesystem::create_directories(outputDir);
 
-        for (const FileInfo &entry : entries)
+        std::string namePrefix = inputPath.stem().string() + "_";
+        size_t namePadWidth = std::max(std::to_string(entries.size() - 1).length(), 2zu);
+        for (FileInfo &entry : entries)
         {
+            entry.fileName = namePrefix + std::string(namePadWidth - entry.fileName.length(), '0') + std::move(entry.fileName) + ".xa";
             std::ofstream outputFile(outputDir / entry.fileName, std::ios::binary);
             if (!outputFile)
             {
-                printf("Error: Cannot write output file.\n");
+                fprintf(stderr, "Error: Cannot write output file.\n");
                 return;
             }
             else
