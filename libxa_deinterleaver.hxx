@@ -24,8 +24,8 @@ protected:
         int nullTermination = 0;
         int filenum;
         int channel;
-        int begSec;
-        std::streampos endPos;
+        std::streamoff begPos;
+        std::streamoff endPos;
     };
 
 private:
@@ -34,15 +34,14 @@ private:
     int inputSectorSize;
     const std::filesystem::path inputPath;
 
-    std::streampos parse(const uintmax_t &fileSize, std::ifstream &inputFile, int &maxPos)
+    std::streamoff parse(const uintmax_t &fileSize, std::ifstream &inputFile, int &maxPos)
     {
-        std::streampos begPos = inputFile.tellg();
         if (buffer[0x12] & 0x04)
         {
             FileInfo &entry = entries.emplace_back();
             entry.filenum = buffer[0x10];
             entry.channel = buffer[0x11];
-            entry.begSec = (begPos -= inputSectorSize) / inputSectorSize;
+            entry.begPos = std::streamoff(inputFile.tellg()) - inputSectorSize;
             entry.fileName = std::to_string(entries.size() - 1);
             /*entry.fileName = inputPath.stem().string() + "_"
                             + std::string(std::max(static_cast<int>(sizeof("00") - entry.fileName.length()), 0), '0')
@@ -118,8 +117,9 @@ private:
             //printf("Done\n");
 
             if (entry.sectorStride)
-                inputFile.seekg(begPos += inputSectorSize, std::ios::beg);
+                inputFile.seekg(entry.begPos + inputSectorSize, std::ios::beg);
         }
+
         return inputFile.tellg();
     }
 
@@ -137,7 +137,7 @@ private:
         {
             manifest << entry.sectorBlock << "," << (inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd")
                      << "," << entry.fileName << "," << entry.nullTermination << "," << entry.filenum << "," << entry.channel
-                     /*<< "," << entry.begSec << "-" << entry.endPos / inputSectorSize - entry.sectorStride - 1*/ << "\n";
+                     /*<< "," << entry.begPos / inputSectorSize << "-" << entry.endPos / inputSectorSize - entry.sectorStride - 1*/ << "\n";
         }
         manifest.close();
     }
@@ -164,15 +164,15 @@ public:
 
         int index = 0;
         int maxPos = 0;
-        std::streampos currentPos;
+        std::streamoff currentPos;
         while (inputFile.read(reinterpret_cast<char*>(buffer) + offset, inputSectorSize))
         {
             currentPos = parse(fileSize, inputFile, maxPos);
 
             if (currentPos < maxPos &&
-                currentPos > (entries[index].begSec + entries[index].sectorStride) * inputSectorSize)
+                currentPos > entries[index].begPos + (entries[index].sectorStride * inputSectorSize))
             {
-                std::streampos minPos = fileSize;
+                std::streamoff minPos = fileSize;
                 for (const auto &entry : entries)
                 {
                     if (entry.endPos > currentPos &&
@@ -198,7 +198,6 @@ public:
         if (entries.empty())
             return;
 
-        std::ifstream inputFile(inputPath, std::ios::binary);
         if (!sectorSize)
             sectorSize = inputSectorSize;
         const int outOffset = CD_SECTOR_SIZE - sectorSize;
@@ -206,6 +205,7 @@ public:
         if (!std::filesystem::exists(outputDir))
             std::filesystem::create_directories(outputDir);
 
+        std::ifstream inputFile(inputPath, std::ios::binary);
         std::string namePrefix = inputPath.stem().string() + "_";
         size_t namePadWidth = std::max(std::to_string(entries.size() - 1).length(), (std::size_t)2);
         for (FileInfo &entry : entries)
@@ -220,8 +220,8 @@ public:
             else
                 printf("Deinterleaving %s... ", entry.fileName.c_str());
 
-            inputFile.seekg(entry.begSec * inputSectorSize, std::ios::beg);
-            std::streampos limit(entry.endPos - std::streampos(entry.nullTermination * (entry.sectorStride + 1) * inputSectorSize));
+            inputFile.seekg(entry.begPos, std::ios::beg);
+            std::streamoff limit = entry.endPos - (entry.nullTermination * (entry.sectorStride + 1) * inputSectorSize);
             while (inputFile.tellg() < limit)
             {
                 for (int i = 0; i == 0 || i < entry.sectorBlock; ++i)
