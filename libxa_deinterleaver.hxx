@@ -175,7 +175,7 @@ public:
                 std::streamoff minPos = fileSize;
                 for (const auto &entry : entries)
                 {
-                    if (entry.endPos > currentPos &&
+                    if (entry.endPos >= currentPos &&
                         entry.endPos < minPos)
                         minPos = entry.endPos;
                 }
