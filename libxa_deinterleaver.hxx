@@ -8,6 +8,7 @@
 #include <fstream>
 #include <vector>
 #include <string.h>
+#include <set>
 
 class deinterleaver
 {
@@ -24,8 +25,8 @@ protected:
         int nullTermination = 0;
         int filenum;
         int channel;
-        std::streamoff begPos;
-        std::streamoff endPos;
+        std::streamoff begOff;
+        std::streamoff endOff;
     };
 
 private:
@@ -33,115 +34,117 @@ private:
     int inputSectorSize;
     const std::filesystem::path inputPath;
 
-    static constexpr int AUDIO_MASK     = 0x04;
     static constexpr int FILENUM_OFFSET = 0x10;
     static constexpr int CHANNEL_OFFSET = 0x11;
     static constexpr int SUBMODE_OFFSET = 0x12;
     unsigned char buffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
 
     // Virtual function to handle non-standard null sectors.
-    virtual void fixNullSector(const FileInfo &entry)
+    virtual bool isInvalid() const
     {
-        // If the file number and channel are both 0xFF, it's a non-standard null sector.
-        // This workaround can be expanded with more checks so as to not modify the entire code.
-        if (buffer[FILENUM_OFFSET] == 0xFF && buffer[CHANNEL_OFFSET] == 0xFF)
-        {
-            buffer[FILENUM_OFFSET] = entry.filenum;
-            buffer[SUBMODE_OFFSET] = 0x00;
-        }
+        // If channel number is 0xFF, it's a non-standard null sector.
+        return buffer[CHANNEL_OFFSET] == 0xFF;
     }
 
-    std::streamoff parse(const uintmax_t &fileSize, std::ifstream &inputFile, int &maxPos)
+    bool isAudio() const
     {
-        if (buffer[SUBMODE_OFFSET] & AUDIO_MASK)
+        return buffer[SUBMODE_OFFSET] & 0x04; // 0x04 = AUDIO_MASK
+    }
+
+    void parse(std::ifstream &inputFile, std::streamoff &currentOff, const uintmax_t &fileSize, std::set<std::streamoff> &processedSectors)
+    {
+        FileInfo &entry = entries.emplace_back();
+        entry.filenum   = buffer[FILENUM_OFFSET];
+        entry.channel   = buffer[CHANNEL_OFFSET];
+        entry.begOff    = currentOff - inputSectorSize;
+        entry.fileName  = std::to_string(entries.size() - 1);
+        /*entry.fileName  = inputPath.stem().string() + "_"
+                        + std::string(std::max(static_cast<int>(sizeof("00") - entry.fileName.length()), 0), '0')
+                        + std::move(entry.fileName) + ".xa";
+
+        if (!std::filesystem::exists(outputDir))
+            std::filesystem::create_directories(outputDir);
+        std::ofstream outputFile(outputDir / entry.fileName, std::ios::binary);
+        if (!outputFile)
         {
-            FileInfo &entry = entries.emplace_back();
-            entry.filenum   = buffer[FILENUM_OFFSET];
-            entry.channel   = buffer[CHANNEL_OFFSET];
-            entry.begPos    = std::streamoff(inputFile.tellg()) - inputSectorSize;
-            entry.fileName  = std::to_string(entries.size() - 1);
-            /*entry.fileName  = inputPath.stem().string() + "_"
-                            + std::string(std::max(static_cast<int>(sizeof("00") - entry.fileName.length()), 0), '0')
-                            + std::move(entry.fileName) + ".xa";
+            printf("Error: Cannot write output file.\n");
+            exit(EXIT_FAILURE);
+        }
+        else
+            printf("Deinterleaving %s... ", entry.fileName.c_str());*/
 
-            if (!std::filesystem::exists(outputDir))
-                std::filesystem::create_directories(outputDir);
-            std::ofstream outputFile(outputDir / entry.fileName, std::ios::binary);
-            if (!outputFile)
-            {
-                printf("Error: Cannot write output file.\n");
-                exit(EXIT_FAILURE);
-            }
+        int skipSize;
+        bool eof = false;
+        do {
+            if (!isAudio())
+                entry.nullTermination++;
+            else if (entry.nullTermination || eof)
+                break;
             else
-                printf("Deinterleaving %s... ", entry.fileName.c_str());*/
+            {
+                if (buffer[SUBMODE_OFFSET] & 0x80) // 0x80 = EOF_MASK
+                    eof = true;
+                //outputFile.write(reinterpret_cast<const char*>(buffer) + offset, sectorSize);
+            }
 
-            int skipSize;
-            do {
-                if (!(buffer[SUBMODE_OFFSET] & AUDIO_MASK))
-                    entry.nullTermination++;
-                else if (entry.nullTermination)
-                    break;
-                //else
-                    //outputFile.write(reinterpret_cast<const char*>(buffer) + offset, sectorSize);
+            entry.sectorCount++;
+            currentOff = inputFile.tellg();
+            processedSectors.insert(currentOff);
+            //if (currentOff >= 99219120)                                       //
+                //currentOff = *std::prev(std::prev(processedSectors.end()));   // Debug breakpoint
+            //currentOff = *std::prev(processedSectors.end());                  //
 
-                //if (std::streamoff currentPos = inputFile.tellg(); currentPos == 4267872)
-                    //int x = 0; // Debug breakpoint
-
-                entry.sectorCount++;
+            if (entry.sectorStride)
+            {
+                inputFile.seekg(skipSize, std::ios::cur);
                 if (!inputFile.read(reinterpret_cast<char*>(buffer) + offset, inputSectorSize))
                 {
                     inputFile.clear();
                     break;
                 }
-
-                // Check if the next sector has different channel or submode.
-                if (entry.channel != buffer[CHANNEL_OFFSET] ||
-                    !(buffer[SUBMODE_OFFSET] & AUDIO_MASK))
+                // Set file number and submode to standard null sector values
+                if (isInvalid())
                 {
-                    if (entry.sectorStride)
-                    {
-                        inputFile.seekg(skipSize, std::ios::cur);
+                    buffer[FILENUM_OFFSET] = entry.filenum;
+                    buffer[SUBMODE_OFFSET] = 0x00;
+                }
+            }
+            else // Calculate sectorStride and skipSize
+            {
+                if (!inputFile.read(reinterpret_cast<char*>(buffer) + offset, inputSectorSize))
+                {
+                    inputFile.clear();
+                    break;
+                }
+                // Check if the next sector has different channel or submode.
+                if (entry.channel != buffer[CHANNEL_OFFSET] || !isAudio())
+                {
+                    do {
+                        entry.sectorStride++;
                         if (!inputFile.read(reinterpret_cast<char*>(buffer) + offset, inputSectorSize))
                         {
                             inputFile.clear();
                             break;
                         }
-                        fixNullSector(entry);
-                    }
-                    else // Calculate sectorStride and skipSize
-                    {
-                        do {
-                            entry.sectorStride++;
-                            if (!inputFile.read(reinterpret_cast<char*>(buffer) + offset, inputSectorSize))
-                            {
-                                inputFile.clear();
-                                break;
-                            }
-                        } while (entry.channel != buffer[CHANNEL_OFFSET] ||
-                                !(buffer[SUBMODE_OFFSET] & AUDIO_MASK));
+                    } while (entry.channel != buffer[CHANNEL_OFFSET] || !isAudio());
 
-                        entry.sectorBlock = entry.sectorCount;
-                        skipSize = (entry.sectorStride - 1) * inputSectorSize;
-                    }
+                    entry.sectorBlock = entry.sectorCount;
+                    skipSize = entry.sectorStride * inputSectorSize;
                 }
-            } while (entry.filenum == buffer[FILENUM_OFFSET] &&
-                    (entry.channel == buffer[CHANNEL_OFFSET] ||
-                    !(buffer[SUBMODE_OFFSET] & 0x7F))); // 0 or 0x80
+            }
+        } while (entry.filenum == buffer[FILENUM_OFFSET] &&
+                (entry.channel == buffer[CHANNEL_OFFSET] ||
+                !(buffer[SUBMODE_OFFSET] & 0x7F))); // 0 or 0x80, standard null sector values
 
-            entry.endPos = inputFile.tellg();
-            if (entry.endPos < fileSize)
-                entry.endPos -= inputSectorSize;
-            if (entry.endPos > maxPos)
-                maxPos = entry.endPos;
+        entry.endOff = inputFile.tellg();
+        if (entry.endOff < fileSize)
+            entry.endOff -= inputSectorSize;
 
-            //outputFile.close();
-            //printf("Done\n");
+        //outputFile.close();
+        //printf("Done\n");
 
-            if (entry.sectorStride)
-                inputFile.seekg(entry.begPos + inputSectorSize, std::ios::beg);
-        }
-
-        return inputFile.tellg();
+        if (entry.sectorStride)
+            inputFile.seekg(entry.begOff + inputSectorSize, std::ios::beg);
     }
 
     // Virtual function to fill the manifest as needed.
@@ -158,7 +161,7 @@ private:
         {
             manifest << entry.sectorBlock << "," << (inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd")
                      << "," << entry.fileName << "," << entry.nullTermination << "," << entry.filenum << "," << entry.channel
-                     /*<< "," << entry.begPos / inputSectorSize << "-" << entry.endPos / inputSectorSize - entry.sectorStride - 1*/ << "\n";
+                     /*<< "," << entry.begOff / inputSectorSize << "-" << entry.endOff / inputSectorSize - entry.sectorStride - 1*/ << "\n";
         }
         manifest.close();
     }
@@ -183,33 +186,39 @@ public:
         inputSectorSize = !(fileSize % CD_SECTOR_SIZE) && !memcmp(sync, buffer, sizeof(sync)) ? CD_SECTOR_SIZE : XA_DATA_SIZE;
         offset = CD_SECTOR_SIZE - inputSectorSize;
 
-        int index  = 0;
-        int maxPos = 0;
-        std::streamoff currentPos;
+        std::streamoff currentOff;
+        std::set<std::streamoff> processedSectors;
+        printf("Analyzing %s...   0%%", inputPath.filename().string().c_str());
         while (inputFile.read(reinterpret_cast<char*>(buffer) + offset, inputSectorSize))
         {
-            currentPos = parse(fileSize, inputFile, maxPos);
+            if (isInvalid() || !isAudio())
+                continue;
 
-            if (currentPos < maxPos &&
-                currentPos > entries[index].begPos + (entries[index].sectorStride * inputSectorSize))
+            currentOff = inputFile.tellg();
+
+            // Skip sectors that has already been processed.
+            if (auto prev = processedSectors.find(currentOff); prev != processedSectors.end())
             {
-                std::streamoff minPos = fileSize;
-                for (const auto &entry : entries)
+                for (auto it = prev; ++it != processedSectors.end(); )
                 {
-                    if (entry.endPos >= currentPos &&
-                        entry.endPos < minPos)
-                        minPos = entry.endPos;
+                    if (*it > *prev + inputSectorSize)
+                        break;
+                    prev = it;
                 }
-                if (minPos == maxPos)
-                    index = entries.size();
-
-                inputFile.seekg(minPos, std::ios::beg);
+                if (*prev != currentOff)
+                    inputFile.seekg(*prev, std::ios::beg);
+                //processedSectors.erase(processedSectors.begin(), std::next(prev));
+                continue;
             }
+
+            printf("\b\b\b\b%3llu%%", (currentOff * 100) / fileSize);
+            parse(inputFile, currentOff, fileSize, processedSectors);
         }
         inputFile.close();
+        printf("\b\b\b\b100%%\n");
 
         if (entries.empty())
-            printf("No valid entries found in the input file.\n");
+            printf("No valid entries found.\n");
     }
 
     // outputDir must be a directory (not a file).
@@ -241,8 +250,8 @@ public:
             else
                 printf("Deinterleaving %s... ", entry.fileName.c_str());
 
-            inputFile.seekg(entry.begPos, std::ios::beg);
-            std::streamoff limit = entry.endPos - (entry.nullTermination * (entry.sectorStride + 1) * inputSectorSize);
+            inputFile.seekg(entry.begOff, std::ios::beg);
+            std::streamoff limit = entry.endOff - (entry.nullTermination * (entry.sectorStride + 1) * inputSectorSize);
             while (inputFile.tellg() < limit)
             {
                 int i = 0;
