@@ -76,7 +76,8 @@ private:
         int skipSize;
         bool eof = false;
         do {
-            if (!isAudio())
+            if (!isAudio() || (eof && [&]{unsigned char empty[2324] {};
+                                return !memcmp(buffer + 0x18, empty, sizeof(empty));}()))
                 entry.nullTermination++;
             else if (entry.nullTermination || eof)
                 break;
@@ -136,15 +137,14 @@ private:
                 (entry.channel == buffer[CHANNEL_OFFSET] ||
                 !(buffer[SUBMODE_OFFSET] & 0x7F))); // 0 or 0x80, standard null sector values
 
-        entry.endOff = inputFile.tellg();
-        if (entry.endOff < fileSize)
-            entry.endOff -= inputSectorSize;
-
+        entry.endOff = currentOff;
         //outputFile.close();
         //printf("Done\n");
 
         if (entry.sectorStride)
             inputFile.seekg(entry.begOff + inputSectorSize, std::ios::beg);
+        else
+            inputFile.seekg(currentOff, std::ios::beg);
     }
 
     // Virtual function to fill the manifest as needed.
