@@ -58,43 +58,43 @@ sectors,type,file,null_termination,xa_file_number,xa_channel_number
 |`file`             |`my file.xa`      |File name or path. Can be a relative or absolute path, but without "quotes".                   |
 |`null_termination` |`0` or more       |Number of null-termination sectors after the end of the file.                                  |
 |`xa_file_number`   |`0`-`255`         |Subheader file number identifier. Can be omitted to keep the file original value (RAW copy).   |
-|`xa_channel_number`|`0`-`255`         |Subheader channel number identifier. Can be omitted to keep the file original value (RAW copy).|
+|`xa_channel_number`|`0`-`254`         |Subheader channel number identifier. Can be omitted to keep the file original value (RAW copy).|
 
 >[!NOTE]
 ><details>
 ><summary>Example.csv manifest for Megaman X6 BGM.XA:</summary>
 >
 >```
->1,xa,BGM_FN-1_000.xa,20,1,0
->1,xa,BGM_FN-1_001.xa,20,1,1
->1,xa,BGM_FN-1_002.xa,20,1,2
->1,xa,BGM_FN-1_003.xa,20,1,3
->1,xa,BGM_FN-1_004.xa,20,1,4
->1,xa,BGM_FN-1_005.xa,20,1,5
->1,xa,BGM_FN-1_006.xa,20,1,6
->1,xa,BGM_FN-1_007.xa,20,1,7
->1,xa,BGM_FN-1_008.xa,20,1,7
->1,xa,BGM_FN-1_009.xa,20,1,6
->1,xa,BGM_FN-1_010.xa,20,1,5
->1,xa,BGM_FN-1_011.xa,20,1,4
->1,xa,BGM_FN-1_012.xa,20,1,3
->1,xa,BGM_FN-1_013.xa,20,1,2
->1,xa,BGM_FN-1_014.xa,20,1,1
->1,xa,BGM_FN-1_015.xa,20,1,0
->1,xa,BGM_FN-1_016.xa,20,1,4
->1,xa,BGM_FN-1_017.xa,20,1,6
->1,xa,BGM_FN-1_018.xa,20,1,5
->1,xa,BGM_FN-1_019.xa,20,1,3
->1,xa,BGM_FN-1_020.xa,20,1,7
->1,xa,BGM_FN-1_021.xa,20,1,2
->1,xa,BGM_FN-1_022.xa,20,1,1
->1,xa,BGM_FN-1_023.xa,20,1,0
->1,xa,BGM_FN-1_024.xa,20,1,0
->1,xa,BGM_FN-1_025.xa,20,1,1
->1,xa,BGM_FN-1_026.xa,20,1,1
->1,xa,BGM_FN-1_027.xa,20,1,1
->1,xa,BGM_FN-1_028.xa,20,1,0
->1,xa,BGM_FN-1_029.xa,20,1,1
+>1,xa,BGM_00.xa,20,1,0
+>1,xa,BGM_01.xa,20,1,1
+>1,xa,BGM_02.xa,20,1,2
+>1,xa,BGM_03.xa,20,1,3
+>1,xa,BGM_04.xa,20,1,4
+>1,xa,BGM_05.xa,20,1,5
+>1,xa,BGM_06.xa,20,1,6
+>1,xa,BGM_07.xa,20,1,7
+>1,xa,BGM_08.xa,20,1,7
+>1,xa,BGM_09.xa,20,1,6
+>1,xa,BGM_10.xa,20,1,5
+>1,xa,BGM_11.xa,20,1,4
+>1,xa,BGM_12.xa,20,1,3
+>1,xa,BGM_13.xa,20,1,2
+>1,xa,BGM_14.xa,20,1,1
+>1,xa,BGM_15.xa,20,1,0
+>1,xa,BGM_16.xa,20,1,4
+>1,xa,BGM_17.xa,20,1,6
+>1,xa,BGM_18.xa,20,1,5
+>1,xa,BGM_19.xa,20,1,3
+>1,xa,BGM_20.xa,20,1,7
+>1,xa,BGM_21.xa,20,1,2
+>1,xa,BGM_22.xa,20,1,1
+>1,xa,BGM_23.xa,20,1,0
+>1,xa,BGM_24.xa,20,1,0
+>1,xa,BGM_25.xa,20,1,1
+>1,xa,BGM_26.xa,20,1,1
+>1,xa,BGM_27.xa,20,1,1
+>1,xa,BGM_28.xa,20,1,0
+>1,xa,BGM_29.xa,20,1,1
 >```
 ></details>
 
