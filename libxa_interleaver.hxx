@@ -71,7 +71,7 @@ public:
         while (std::getline(inputFile, line))
         {
             entry.sectorBlock = atoi(strtok_r(line.data(), ",", &saveptr));
-            if (!entry.sectorBlock)
+            if (entry.sectorBlock < 1)
                 continue;
             else if (entry.sectorBlock > sectorStride ||
                     div_check < 0)

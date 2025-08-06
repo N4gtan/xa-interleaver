@@ -150,20 +150,21 @@ private:
     // Virtual function to fill the manifest as needed.
     virtual void createManifest(const std::filesystem::path &outputDir, const std::string &fileName)
     {
-        std::ofstream manifest(outputDir / fileName);
+        FILE* manifest = fopen((outputDir / fileName).string().c_str(), "w");
         if (!manifest)
         {
             fprintf(stderr, "Error: Cannot write manifest file.\n");
             return;
         }
 
+        fprintf(manifest, "sectors,type,file,null_termination,xa_file_number,xa_channel_number\n");
         for (const FileInfo &entry : entries)
         {
-            manifest << entry.sectorBlock << "," << (inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd")
-                     << "," << entry.fileName << "," << entry.nullTermination << "," << entry.filenum << "," << entry.channel
-                     /*<< "," << entry.begOff / inputSectorSize << "-" << entry.endOff / inputSectorSize - entry.sectorStride - 1*/ << "\n";
+            fprintf(manifest, "%d,%s,%s,%d,%d,%d"/*",%lld-%lld"*/"\n", entry.sectorBlock, inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd",
+                entry.fileName.c_str(), entry.nullTermination, entry.filenum, entry.channel/*,
+                entry.begOff / inputSectorSize, entry.endOff / inputSectorSize - entry.sectorStride - 1*/);
         }
-        manifest.close();
+        fclose(manifest);
     }
 
 public:
