@@ -49,16 +49,17 @@ xa-deinterleaver path/to/input.xa 2352 path/to/output/
 ## Manifest
 The manifest text file must be in the following format:
 ```
-sectors,type,file,null_termination,xa_file_number,xa_channel_number
+chunk,type,file,null_termination,xa_file_number,xa_channel_number,xa_null_subheader
 ```
-| Field             | Value            | Information                                                                                   |
-|-------------------|------------------|-----------------------------------------------------------------------------------------------|
-|`sectors`          |`1`-`<stride>`    |Sector block size to write between strides. Cannot be higher than the `<stride>` command.      |
-|`type`             |`xa` `xacd` `null`|`xa` for 2336 sector file. `xacd` for 2352 sector file. `null` for empty sectors.              |
-|`file`             |`my file.xa`      |File name or path. Can be a relative or absolute path, but without "quotes".                   |
-|`null_termination` |`0` or more       |Number of null-termination sectors after the end of the file.                                  |
-|`xa_file_number`   |`0`-`255`         |Subheader file number identifier. Can be omitted to keep the file original value (RAW copy).   |
-|`xa_channel_number`|`0`-`254`         |Subheader channel number identifier. Can be omitted to keep the file original value (RAW copy).|
+| Field             | Value            | Information                                                                                      |
+|-------------------|------------------|--------------------------------------------------------------------------------------------------|
+|`chunk`            |`1`-`<stride>`    |Sector chunk size to write between strides. Cannot be higher than the `<stride>` command.         |
+|`type`             |`xa` `xacd` `null`|`xa` for 2336 sector file. `xacd` for 2352 sector file. `null` for empty sectors.                 |
+|`file`             |`my file.xa`      |File name or path. Can be a relative or absolute path, but without "quotes". (omitted for `null`) |
+|`null_termination` |`0` or more       |***OPTIONAL*** number of null-termination sectors after the end of the file. Defaults to `0`.     |
+|`xa_file_number`   |`0`-`255`         |***OPTIONAL*** subheader file number identifier. Defaults to `file` original value (RAW copy).    |
+|`xa_channel_number`|`0`-`254`         |***OPTIONAL*** subheader channel number identifier. Defaults to `file` original value (RAW copy). |
+|`xa_null_subheader`|`0xFFFFFFFF`      |***OPTIONAL*** subheader value for null-termination sectors. Defaults to 0x`xa_file_number`000000.|
 
 >[!NOTE]
 ><details>
