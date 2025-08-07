@@ -19,12 +19,13 @@ protected:
     struct FileInfo
     {
         std::string fileName;
-        int sectorBlock;
-        int sectorCount     = 0;
-        int sectorStride    = 0;
-        int nullTermination = 0;
+        int sectorChunk;
+        int sectorCount;
+        int sectorStride;
+        int nullTermination;
         int filenum;
         int channel;
+        alignas(int) uint8_t nullSubheader[4];
         std::streamoff begOff;
         std::streamoff endOff;
     };
@@ -67,7 +68,7 @@ private:
         std::ofstream outputFile(outputDir / entry.fileName, std::ios::binary);
         if (!outputFile)
         {
-            printf("Error: Cannot write output file.\n");
+            fprintf(stderr, "Error: Cannot write \"%s\". %s\n", entry.fileName.c_str(), strerror(errno));
             exit(EXIT_FAILURE);
         }
         else
@@ -78,7 +79,11 @@ private:
         do {
             if (!isAudio() || (eof && [&]{unsigned char empty[2324] {};
                                 return !memcmp(buffer + 0x18, empty, sizeof(empty));}()))
+            {
                 entry.nullTermination++;
+                if (*reinterpret_cast<int*>(entry.nullSubheader) == 0)
+                    memcpy(&entry.nullSubheader, &buffer[FILENUM_OFFSET], sizeof(entry.nullSubheader));
+            }
             else if (entry.nullTermination || eof)
                 break;
             else
@@ -129,7 +134,7 @@ private:
                         }
                     } while (entry.channel != buffer[CHANNEL_OFFSET] || !isAudio());
 
-                    entry.sectorBlock = entry.sectorCount;
+                    entry.sectorChunk = entry.sectorCount;
                     skipSize = entry.sectorStride * inputSectorSize;
                 }
             }
@@ -153,16 +158,17 @@ private:
         FILE* manifest = fopen((outputDir / fileName).string().c_str(), "w");
         if (!manifest)
         {
-            fprintf(stderr, "Error: Cannot write manifest file.\n");
+            fprintf(stderr, "Error: Cannot write manifest \"%s\". %s\n", fileName.c_str(), strerror(errno));
             return;
         }
 
-        fprintf(manifest, "sectors,type,file,null_termination,xa_file_number,xa_channel_number\n");
+        fprintf(manifest, "chunk,type,file,null_termination,xa_file_number,xa_channel_number"/*",xa_null_subheader"*/",sector_beg-end\n");
         for (const FileInfo &entry : entries)
         {
-            fprintf(manifest, "%d,%s,%s,%d,%d,%d"/*",%lld-%lld"*/"\n", entry.sectorBlock, inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd",
-                entry.fileName.c_str(), entry.nullTermination, entry.filenum, entry.channel/*,
-                entry.begOff / inputSectorSize, entry.endOff / inputSectorSize - entry.sectorStride - 1*/);
+            fprintf(manifest, "%d,%s,%s,%d,%d,%d"/*",0x%02X%02X%02X%02X"*/",%lld-%lld\n", entry.sectorChunk, inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd",
+                entry.fileName.c_str(), entry.nullTermination, entry.filenum, entry.channel,
+                /*entry.nullSubheader[0], entry.nullSubheader[1], entry.nullSubheader[2], entry.nullSubheader[3],*/
+                entry.begOff / inputSectorSize, (entry.endOff / inputSectorSize) - ((entry.sectorStride + 1) * entry.nullTermination) - 1);
         }
         fclose(manifest);
     }
@@ -178,7 +184,7 @@ public:
         unsigned char sync[12];
         if (!inputFile.read(reinterpret_cast<char*>(sync), sizeof(sync)))
         {
-            fprintf(stderr, "Error: Cannot read input file.\n");
+            fprintf(stderr, "Error: Cannot read \"%s\". %s\n", inputPath.filename().string().c_str(), strerror(errno));
             return;
         }
         inputFile.seekg(0, std::ios::beg);
@@ -245,7 +251,7 @@ public:
             std::ofstream outputFile(outputDir / entry.fileName, std::ios::binary);
             if (!outputFile)
             {
-                fprintf(stderr, "Error: Cannot write output file.\n");
+                fprintf(stderr, "Error: Cannot write \"%s\". %s\n", entry.fileName.c_str(), strerror(errno));
                 return;
             }
             else
@@ -263,7 +269,7 @@ public:
                         break;
                     }
                     outputFile.write(reinterpret_cast<const char*>(buffer) + outOffset, sectorSize);
-                } while (++i < entry.sectorBlock);
+                } while (++i < entry.sectorChunk);
                 inputFile.seekg(entry.sectorStride * inputSectorSize, std::ios::cur);
             }
 

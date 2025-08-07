@@ -5,7 +5,7 @@
 
 #ifdef _MSC_VER
     #define strtok_r strtok_s
-    #define strcasecmp _stricmp
+    #define strncasecmp _strnicmp
     #include <string>
 #endif
 
@@ -19,16 +19,17 @@ class interleaver
 {
 protected:
     static constexpr int CD_SECTOR_SIZE = 2352;
-    static constexpr int XA_DATA_SIZE = 2336;
+    static constexpr int XA_DATA_SIZE   = 2336;
 
     struct FileInfo
     {
-        int sectorBlock = 1;
+        int sectorChunk = 1;
         int sectorSize;
         std::filesystem::path filePath;
-        int nullTermination = 0;
+        int nullTermination;
         std::optional<uint8_t> filenum;
         std::optional<uint8_t> channel;
+        alignas(int) uint8_t nullSubheader[4];
 
         uintmax_t fileSize;
         int begSec;
@@ -37,14 +38,18 @@ protected:
 
 private:
     const int sectorStride;
+    static constexpr int FILENUM_OFFSET = 0x10;
+    static constexpr int CHANNEL_OFFSET = 0x11;
 
     // Virtual function to fill null sectors as needed.
     virtual void nullCustomizer(unsigned char *emptyBuffer, FileInfo &entry)
     {
-        emptyBuffer[0x010] = emptyBuffer[0x014] = entry.filenum.value_or(emptyBuffer[0x014]);
-        //emptyBuffer[0x011] = emptyBuffer[0x015] = entry.nullTermination >= 0 ? entry.channel.value_or(0) : 0;
-        //emptyBuffer[0x012] = emptyBuffer[0x016] = 0x48;
-        //emptyBuffer[0x013] = emptyBuffer[0x017] = 0x00;
+        if (*reinterpret_cast<int*>(entry.nullSubheader) != 0)
+            return;
+        entry.nullSubheader[0] = entry.filenum.value_or(emptyBuffer[FILENUM_OFFSET]);
+        //entry.nullSubheader[1] = entry.nullTermination >= 0 ? entry.channel.value_or(0) : 0;
+        //entry.nullSubheader[2] = 0x48;
+        //entry.nullSubheader[3] = 0x00;
     }
 
 public:
@@ -57,23 +62,23 @@ public:
         std::ifstream inputFile(inputPath);
         if (!inputFile.is_open())
         {
-            fprintf(stderr, "Error: Cannot read input file.\n");
+            fprintf(stderr, "Error: Cannot read \"%s\". %s\n", inputPath.filename().string().c_str(), strerror(errno));
             return;
         }
 
-        FileInfo entry;
-        std::string line;
         char *field;
         char *saveptr;
+        std::string line;
         size_t lastMinSec = 0;
         int div_check = sectorStride;
 
         while (std::getline(inputFile, line))
         {
-            entry.sectorBlock = atoi(strtok_r(line.data(), ",", &saveptr));
-            if (entry.sectorBlock < 1)
+            FileInfo entry {};
+            entry.sectorChunk = atoi(strtok_r(line.data(), ",", &saveptr));
+            if (entry.sectorChunk < 1)
                 continue;
-            else if (entry.sectorBlock > sectorStride ||
+            else if (entry.sectorChunk > sectorStride ||
                     div_check < 0)
             {
                 fprintf(stderr, "Error: Consecutive sectors are not divisible by %d\n", sectorStride);
@@ -82,11 +87,11 @@ public:
             }
 
             if (!(field = strtok_r(NULL, ",", &saveptr)) ||
-                !strcasecmp(field, "null"))
+                !strncasecmp(field, "null", 4))
                 entry.sectorSize = 0;
-            else if (!strcasecmp(field, "xacd"))
+            else if (!strncasecmp(field, "xacd", 4))
                 entry.sectorSize = CD_SECTOR_SIZE;
-            else if (!strcasecmp(field, "xa"))
+            else if (!strncasecmp(field, "xa", 2))
                 entry.sectorSize = XA_DATA_SIZE;
             else
             {
@@ -102,7 +107,7 @@ public:
                     std::ifstream input(entry.filePath, std::ios::binary);
                     if (!input.is_open())
                     {
-                        fprintf(stderr, "Error: Cannot open file \"%s\" at line %zu. %s\n", entry.filePath.string().c_str(), entries.size() + 1, strerror(errno));
+                        fprintf(stderr, "Error: Cannot read \"%s\" at line %zu. %s\n", entry.filePath.string().c_str(), entries.size() + 1, strerror(errno));
                         std::vector<FileInfo>().swap(entries);
                         return;
                     }
@@ -112,7 +117,7 @@ public:
                     if (!entry.fileSize ||
                         entry.fileSize % entry.sectorSize)
                     {
-                        fprintf(stderr, "Error: Invalid type for file \"%s\" at line %zu\n", field, entries.size() + 1);
+                        fprintf(stderr, "Error: Invalid type for \"%s\" at line %zu\n", field, entries.size() + 1);
                         std::vector<FileInfo>().swap(entries);
                         return;
                     }
@@ -131,11 +136,19 @@ public:
                     {
                         entry.filenum = atoi(field);
                         if ((field = strtok_r(NULL, ",", &saveptr)))
+                        {
                             entry.channel = atoi(field);
+                            if ((field = strtok_r(NULL, ",", &saveptr)) &&
+                                !strncasecmp(field, "0x", 2))
+                            {
+                                field += 2;
+                                sscanf(field, "%2hhx%2hhx%2hhx%2hhx", &entry.nullSubheader[0], &entry.nullSubheader[1], &entry.nullSubheader[2], &entry.nullSubheader[3]);
+                            }
+                        }
                     }
                 }
 
-                if (div_check - entry.sectorBlock >= 0)
+                if (div_check - entry.sectorChunk >= 0)
                 {
                     entry.begSec = entries.size();
                     entry.endSec = (entry.fileSize / entry.sectorSize + entry.nullTermination) * sectorStride + entry.begSec;
@@ -155,7 +168,7 @@ public:
             }
 
             if (div_check)
-                div_check -= entry.sectorBlock;
+                div_check -= entry.sectorChunk;
             entries.push_back(std::move(entry));
         }
     }
@@ -182,7 +195,7 @@ public:
                     sectorSize = entry.sectorSize;
                 can_read++;
             }
-            //sectorsToFill -= entry.sectorBlock;
+            //sectorsToFill -= entry.sectorChunk;
         }
         const int outOffset = CD_SECTOR_SIZE - sectorSize;
 
@@ -204,18 +217,21 @@ public:
                 FileInfo &entry = workingEntries[i];
                 std::ifstream &inputFile = inputFiles[i];
 
-                for (int is = 0; is < entry.sectorBlock; ++is)
+                for (int is = 0; is < entry.sectorChunk; ++is)
                 {
                     if (entry.sectorSize &&
                         inputFile.read(reinterpret_cast<char*>(buffer) + (CD_SECTOR_SIZE - entry.sectorSize), entry.sectorSize))
                     {
-                        buffer[0x010] = buffer[0x014] = entry.filenum.value_or(buffer[0x014]);
-                        buffer[0x011] = buffer[0x015] = entry.channel.value_or(buffer[0x015]);
+                        buffer[FILENUM_OFFSET + 4] = buffer[FILENUM_OFFSET] = entry.filenum.value_or(buffer[FILENUM_OFFSET]);
+                        buffer[CHANNEL_OFFSET + 4] = buffer[CHANNEL_OFFSET] = entry.channel.value_or(buffer[CHANNEL_OFFSET]);
                         outputFile.write(reinterpret_cast<const char*>(buffer) + outOffset, sectorSize);
                     }
                     else
                     {
+                        emptyBuffer[FILENUM_OFFSET] = buffer[FILENUM_OFFSET];
                         nullCustomizer(emptyBuffer, entry);
+                        memcpy(&emptyBuffer[FILENUM_OFFSET], &entry.nullSubheader, sizeof(entry.nullSubheader));
+                        memcpy(&emptyBuffer[FILENUM_OFFSET + 4], &entry.nullSubheader, sizeof(entry.nullSubheader));
                         outputFile.write(reinterpret_cast<const char*>(emptyBuffer) + outOffset, sectorSize);
                     }
                 }

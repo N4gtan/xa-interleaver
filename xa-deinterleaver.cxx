@@ -18,6 +18,8 @@ int main(int argc, char *argv[])
     const std::filesystem::path outputDir = argc >= 4 ? argv[3] : inputFile.parent_path() / inputFile.stem();
 
     deinterleaver(inputFile).deinterleave(outputDir, sectorSize);
+    if (errno)
+        return EXIT_FAILURE;
 
     printf("Process complete.\n");
 

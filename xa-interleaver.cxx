@@ -21,7 +21,8 @@ int main(int argc, char *argv[])
     interleaver files(inputFile, sectorStride);
     if (files.entries.empty())
     {
-        fprintf(stderr, "Invalid manifest\n");
+        if (!errno)
+            fprintf(stderr, "Invalid manifest\n");
         return EXIT_FAILURE;
     }
 
