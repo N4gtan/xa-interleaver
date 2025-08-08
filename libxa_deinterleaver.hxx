@@ -123,7 +123,8 @@ private:
                     break;
                 }
                 // Check if the next sector has different channel or submode.
-                if (entry.channel != buffer[CHANNEL_OFFSET] || !isAudio())
+                if (processedSectors.find(inputFile.tellg()) != processedSectors.end() ||
+                    entry.channel != buffer[CHANNEL_OFFSET] || !isAudio())
                 {
                     do {
                         entry.sectorStride++;
@@ -132,13 +133,15 @@ private:
                             inputFile.clear();
                             break;
                         }
-                    } while (entry.channel != buffer[CHANNEL_OFFSET] || !isAudio());
+                    } while (processedSectors.find(inputFile.tellg()) != processedSectors.end() ||
+                             entry.channel != buffer[CHANNEL_OFFSET] || !isAudio());
 
                     entry.sectorChunk = entry.sectorCount;
                     skipSize = entry.sectorStride * inputSectorSize;
                 }
             }
-        } while (entry.filenum == buffer[FILENUM_OFFSET] &&
+        } while (processedSectors.find(inputFile.tellg()) == processedSectors.end() &&
+                 entry.filenum == buffer[FILENUM_OFFSET] &&
                 (entry.channel == buffer[CHANNEL_OFFSET] ||
                 !(buffer[SUBMODE_OFFSET] & 0x7F))); // 0 or 0x80, standard null sector values
 
@@ -149,7 +152,7 @@ private:
         if (entry.sectorStride)
             inputFile.seekg(entry.begOff + inputSectorSize, std::ios::beg);
         else
-            inputFile.seekg(currentOff, std::ios::beg);
+            inputFile.seekg(entry.endOff, std::ios::beg);
     }
 
     // Virtual function to fill the manifest as needed.
