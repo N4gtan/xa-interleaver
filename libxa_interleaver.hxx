@@ -1,12 +1,12 @@
-// Original code and idea by asiekierka (https://github.com/ChenThread/candyk-psx/blob/master/toolsrc/xainterleave/xainterleave.c)
-// But completely rewrited by me (Nagtan)
+// Based on asiekierka's code (https://github.com/ChenThread/candyk-psx/blob/master/toolsrc/xainterleave/xainterleave.c)
+// But completely rewritten by me (Nagtan)
 
 #pragma once
 
 #ifdef _MSC_VER
-    #define strtok_r strtok_s
-    #define strncasecmp _strnicmp
-    #include <string>
+#define strtok_r strtok_s
+#define strncasecmp _strnicmp
+#include <string>
 #endif
 
 #include <filesystem>
@@ -17,10 +17,7 @@
 
 class interleaver
 {
-protected:
-    static constexpr int CD_SECTOR_SIZE = 2352;
-    static constexpr int XA_DATA_SIZE   = 2336;
-
+public:
     struct FileInfo
     {
         int sectorChunk = 1;
@@ -35,24 +32,6 @@ protected:
         int begSec;
         int endSec;
     };
-
-private:
-    const int sectorStride;
-    static constexpr int FILENUM_OFFSET = 0x10;
-    static constexpr int CHANNEL_OFFSET = 0x11;
-
-    // Virtual function to fill null sectors as needed.
-    virtual void nullCustomizer(unsigned char *emptyBuffer, FileInfo &entry)
-    {
-        if (*reinterpret_cast<int*>(entry.nullSubheader) != 0)
-            return;
-        entry.nullSubheader[0] = entry.filenum.value_or(emptyBuffer[FILENUM_OFFSET]);
-        //entry.nullSubheader[1] = entry.nullTermination >= 0 ? entry.channel.value_or(0) : 0;
-        //entry.nullSubheader[2] = 0x48;
-        //entry.nullSubheader[3] = 0x00;
-    }
-
-public:
     std::vector<FileInfo> entries;
 
     // inputPath must be a .csv or .txt or any text file with the appropriate format.
@@ -74,12 +53,12 @@ public:
 
         while (std::getline(inputFile, line))
         {
-            FileInfo entry {};
+            FileInfo entry{};
             entry.sectorChunk = atoi(strtok_r(line.data(), ",", &saveptr));
             if (entry.sectorChunk < 1)
                 continue;
             else if (entry.sectorChunk > sectorStride ||
-                    div_check < 0)
+                     div_check < 0)
             {
                 fprintf(stderr, "Error: Consecutive sectors are not divisible by %d\n", sectorStride);
                 std::vector<FileInfo>().swap(entries);
@@ -206,7 +185,7 @@ public:
             for (int i = workingEntries.size() - 1; sectorsToFill > 0; ++i, --sectorsToFill)
             {
                 FileInfo &e = workingEntries.emplace_back();
-                e.filenum = workingEntries[i].filenum;
+                e.filenum   = workingEntries[i].filenum;
             }
         }*/
 
@@ -220,11 +199,11 @@ public:
                 for (int is = 0; is < entry.sectorChunk; ++is)
                 {
                     if (entry.sectorSize &&
-                        inputFile.read(reinterpret_cast<char*>(buffer) + (CD_SECTOR_SIZE - entry.sectorSize), entry.sectorSize))
+                        inputFile.read(reinterpret_cast<char *>(buffer) + (CD_SECTOR_SIZE - entry.sectorSize), entry.sectorSize))
                     {
                         buffer[FILENUM_OFFSET + 4] = buffer[FILENUM_OFFSET] = entry.filenum.value_or(buffer[FILENUM_OFFSET]);
                         buffer[CHANNEL_OFFSET + 4] = buffer[CHANNEL_OFFSET] = entry.channel.value_or(buffer[CHANNEL_OFFSET]);
-                        outputFile.write(reinterpret_cast<const char*>(buffer) + outOffset, sectorSize);
+                        outputFile.write(reinterpret_cast<const char *>(buffer) + outOffset, sectorSize);
                     }
                     else
                     {
@@ -232,7 +211,7 @@ public:
                         nullCustomizer(emptyBuffer, entry);
                         memcpy(&emptyBuffer[FILENUM_OFFSET], &entry.nullSubheader, sizeof(entry.nullSubheader));
                         memcpy(&emptyBuffer[FILENUM_OFFSET + 4], &entry.nullSubheader, sizeof(entry.nullSubheader));
-                        outputFile.write(reinterpret_cast<const char*>(emptyBuffer) + outOffset, sectorSize);
+                        outputFile.write(reinterpret_cast<const char *>(emptyBuffer) + outOffset, sectorSize);
                     }
                 }
 
@@ -259,5 +238,23 @@ public:
         outputFile.put(EOFbit);
         outputFile.seekp(3, std::ios::cur);
         outputFile.put(EOFbit);
+    }
+
+private:
+    const int sectorStride;
+    static constexpr int CD_SECTOR_SIZE = 2352;
+    static constexpr int XA_DATA_SIZE   = 2336;
+    static constexpr int FILENUM_OFFSET = 0x10;
+    static constexpr int CHANNEL_OFFSET = 0x11;
+
+    // Virtual function to fill null sectors as needed.
+    virtual void nullCustomizer(unsigned char *emptyBuffer, FileInfo &entry)
+    {
+        if (*reinterpret_cast<int *>(entry.nullSubheader) != 0)
+            return;
+        entry.nullSubheader[0] = entry.filenum.value_or(emptyBuffer[FILENUM_OFFSET]);
+        //entry.nullSubheader[1] = entry.nullTermination >= 0 ? entry.channel.value_or(0) : 0;
+        //entry.nullSubheader[2] = 0x48;
+        //entry.nullSubheader[3] = 0x00;
     }
 };
