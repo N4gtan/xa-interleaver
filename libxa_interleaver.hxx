@@ -240,13 +240,14 @@ public:
         outputFile.put(EOFbit);
     }
 
-private:
-    const int sectorStride;
-
+protected:
     static constexpr int CD_SECTOR_SIZE = 2352;
     static constexpr int XA_DATA_SIZE   = 2336;
     static constexpr int FILENUM_OFFSET = 0x10;
     static constexpr int CHANNEL_OFFSET = 0x11;
+
+private:
+    const int sectorStride;
 
     // Virtual function to fill null sectors as needed.
     virtual void nullCustomizer(unsigned char *emptyBuffer, FileInfo &entry)

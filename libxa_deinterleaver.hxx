@@ -143,16 +143,18 @@ public:
         createManifest(outputDir, inputPath.stem().string() + ".csv");
     }
 
-private:
-    int offset{};
+protected:
     int inputSectorSize{};
-    const std::filesystem::path inputPath;
-
     static constexpr int CD_SECTOR_SIZE = 2352;
     static constexpr int XA_DATA_SIZE   = 2336;
     static constexpr int FILENUM_OFFSET = 0x10;
     static constexpr int CHANNEL_OFFSET = 0x11;
     static constexpr int SUBMODE_OFFSET = 0x12;
+
+private:
+    int offset{};
+    const std::filesystem::path inputPath;
+
     unsigned char buffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
 
     // Expandable function to handle non-standard null sectors.
