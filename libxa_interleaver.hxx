@@ -242,6 +242,7 @@ public:
 
 private:
     const int sectorStride;
+
     static constexpr int CD_SECTOR_SIZE = 2352;
     static constexpr int XA_DATA_SIZE   = 2336;
     static constexpr int FILENUM_OFFSET = 0x10;

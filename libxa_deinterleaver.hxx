@@ -31,18 +31,29 @@ public:
     // inputPath must be an interleaved .xa or .str file. CD image files may have unexpected results.
     deinterleaver(const std::filesystem::path inputPath) : inputPath(inputPath)
     {
+        uintmax_t fileSize;
         std::ifstream inputFile(inputPath, std::ios::binary);
 
-        unsigned char sync[12];
-        if (!inputFile.read(reinterpret_cast<char *>(sync), sizeof(sync)))
-        {
-            fprintf(stderr, "Error: Cannot read \"%s\". %s\n", inputPath.filename().string().c_str(), strerror(errno));
-            return;
+        { // Error handling scope block
+            unsigned char sync[12];
+            if (!inputFile.read(reinterpret_cast<char *>(sync), sizeof(sync)))
+            {
+                fprintf(stderr, "Error: Cannot read \"%s\". %s\n", inputPath.filename().string().c_str(), strerror(errno));
+                return;
+            }
+            fileSize = std::filesystem::file_size(inputPath);
+            if (fileSize % CD_SECTOR_SIZE == 0 && memcmp(sync, buffer, sizeof(sync)) == 0)
+                inputSectorSize = CD_SECTOR_SIZE;
+            else if (fileSize % XA_DATA_SIZE == 0)
+                inputSectorSize = XA_DATA_SIZE;
+            else
+            {
+                fprintf(stderr, "Error: File \"%s\" is not aligned to 2336/2352 bytes.\n", inputPath.filename().string().c_str());
+                errno = EINVAL;
+                return;
+            }
+            inputFile.seekg(0, std::ios::beg);
         }
-        inputFile.seekg(0, std::ios::beg);
-
-        const uintmax_t fileSize = std::filesystem::file_size(inputPath);
-        inputSectorSize = !(fileSize % CD_SECTOR_SIZE) && !memcmp(sync, buffer, sizeof(sync)) ? CD_SECTOR_SIZE : XA_DATA_SIZE;
         offset = CD_SECTOR_SIZE - inputSectorSize;
 
         std::streamoff currentOff;
@@ -71,7 +82,7 @@ public:
             }
 
             printf("\b\b\b\b%3llu%%", (currentOff * 100) / fileSize);
-            parse(inputFile, currentOff, fileSize, processedSectors);
+            parse(inputFile, currentOff, processedSectors);
         }
         inputFile.close();
         printf("\b\b\b\b100%%\n");
@@ -156,7 +167,7 @@ private:
         return buffer[SUBMODE_OFFSET] & 0x04; // 0x04 = AUDIO_MASK
     }
 
-    void parse(std::ifstream &inputFile, std::streamoff &currentOff, const uintmax_t &fileSize, std::set<std::streamoff> &processedSectors)
+    void parse(std::ifstream &inputFile, std::streamoff &currentOff, std::set<std::streamoff> &processedSectors)
     {
         FileInfo &entry = entries.emplace_back();
         entry.filenum   = buffer[FILENUM_OFFSET];
@@ -181,8 +192,8 @@ private:
         int skipSize;
         bool eof = false;
         do {
-            if (!isAudio() || (eof && [&]{unsigned char empty[2324] {};
-                                return !memcmp(buffer + 0x18, empty, sizeof(empty));}()))
+            if (!isAudio() || (eof && [&]{unsigned char empty[2324]{};
+                                return memcmp(buffer + 0x18, empty, sizeof(empty)) == 0;}()))
             {
                 entry.nullTermination++;
                 if (*reinterpret_cast<int *>(entry.nullSubheader) == 0)
@@ -247,7 +258,7 @@ private:
         } while (processedSectors.find(inputFile.tellg()) == processedSectors.end() &&
                  entry.filenum == buffer[FILENUM_OFFSET] &&
                 (entry.channel == buffer[CHANNEL_OFFSET] ||
-                !(buffer[SUBMODE_OFFSET] & 0x7F))); // 0 or 0x80, standard null sector values
+                (buffer[SUBMODE_OFFSET] & 0x7F) == 0)); // 0 or 0x80, standard null sector values
 
         entry.endOff = currentOff;
         //outputFile.close();
