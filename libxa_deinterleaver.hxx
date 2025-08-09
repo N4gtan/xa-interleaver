@@ -144,8 +144,8 @@ public:
     }
 
 private:
-    int offset;
-    int inputSectorSize;
+    int offset{};
+    int inputSectorSize{};
     const std::filesystem::path inputPath;
 
     static constexpr int CD_SECTOR_SIZE = 2352;
@@ -155,8 +155,8 @@ private:
     static constexpr int SUBMODE_OFFSET = 0x12;
     unsigned char buffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
 
-    // Virtual function to handle non-standard null sectors.
-    virtual bool isInvalid() const
+    // Expandable function to handle non-standard null sectors.
+    bool isInvalid() const
     {
         // If channel number is 0xFF, it's a non-standard null sector.
         return buffer[CHANNEL_OFFSET] == 0xFF;
