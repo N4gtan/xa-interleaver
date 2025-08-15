@@ -36,7 +36,7 @@ public:
 
     // inputPath must be a .csv or .txt or any text file with the appropriate format.
     // sectorStride must be like the psx XA format (2/4/8/16/32).
-    interleaver(const std::filesystem::path inputPath, const int sectorStride) : sectorStride(sectorStride)
+    explicit interleaver(const std::filesystem::path inputPath, const int sectorStride) : sectorStride(sectorStride)
     {
         std::ifstream inputFile(inputPath);
         if (!inputFile.is_open())
@@ -219,13 +219,13 @@ public:
                     inputFile.tellg() >= entry.fileSize &&
                     entry.nullTermination-- <= 0)
                 {
-                    inputFiles[i].close();
+                    inputFile.close();
                     printf("Interleaving %s... Done\n", entry.filePath.filename().string().c_str());
                     if (sectorStride < workingEntries.size())
                     {
-                        workingEntries[i] = workingEntries[sectorStride];
+                        entry = workingEntries[sectorStride];
+                        inputFile.open(entry.filePath, std::ios::binary);
                         workingEntries.erase(workingEntries.begin() + sectorStride);
-                        inputFiles[i].open(entry.filePath, std::ios::binary);
                     }
                     can_read--;
                 }

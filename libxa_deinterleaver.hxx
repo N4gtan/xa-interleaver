@@ -29,7 +29,7 @@ public:
     std::vector<FileInfo> entries;
 
     // inputPath must be an interleaved .xa or .str file. CD image files may have unexpected results.
-    deinterleaver(const std::filesystem::path inputPath) : inputPath(inputPath)
+    explicit deinterleaver(const std::filesystem::path inputPath) : inputPath(inputPath)
     {
         uintmax_t fileSize;
         std::ifstream inputFile(inputPath, std::ios::binary);
