@@ -117,11 +117,13 @@ public:
                         if ((field = strtok_r(NULL, ",", &saveptr)))
                         {
                             entry.channel = atoi(field);
-                            if ((field = strtok_r(NULL, ",", &saveptr)) &&
-                                !strncasecmp(field, "0x", 2))
+                            while ((field = strtok_r(NULL, ",", &saveptr)))
                             {
+                                if (strncasecmp(field, "0x", 2) != 0)
+                                    continue;
                                 field += 2;
                                 sscanf(field, "%2hhx%2hhx%2hhx%2hhx", &entry.nullSubheader[0], &entry.nullSubheader[1], &entry.nullSubheader[2], &entry.nullSubheader[3]);
+                                break;
                             }
                         }
                     }
