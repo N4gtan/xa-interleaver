@@ -122,20 +122,20 @@ public:
 
             inputFile.seekg(entry.begOff, std::ios::beg);
             std::streamoff limit = entry.endOff - (entry.nullTermination * (entry.sectorStride + 1) * inputSectorSize);
-            while (inputFile.tellg() < limit)
-            {
+            do {
                 int i = 0;
                 do {
                     if (!inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
                     {
                         inputFile.clear();
-                        break;
+                        goto END;
                     }
                     outputFile.write(reinterpret_cast<const char *>(buffer) + outOffset, sectorSize);
                 } while (++i < entry.sectorChunk);
                 inputFile.seekg(entry.sectorStride * inputSectorSize, std::ios::cur);
-            }
+            } while (inputFile.tellg() < limit);
 
+        END:
             outputFile.close();
             printf("Done\n");
         }
@@ -202,7 +202,7 @@ private:
                     memcpy(&entry.nullSubheader, &buffer[FILENUM_OFFSET], sizeof(entry.nullSubheader));
             }
             else if (entry.nullTermination || eof)
-                break;
+                goto END;
             else
             {
                 if (buffer[SUBMODE_OFFSET] & 0x80) // 0x80 = EOF_MASK
@@ -223,7 +223,7 @@ private:
                 if (!inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
                 {
                     inputFile.clear();
-                    break;
+                    goto END;
                 }
                 // Set file number and submode to standard null sector values
                 if (isInvalid())
@@ -237,7 +237,7 @@ private:
                 if (!inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
                 {
                     inputFile.clear();
-                    break;
+                    goto END;
                 }
                 // Check if the next sector has different channel or submode.
                 if (processedSectors.find(inputFile.tellg()) != processedSectors.end() ||
@@ -248,7 +248,7 @@ private:
                         if (!inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
                         {
                             inputFile.clear();
-                            break;
+                            goto END;
                         }
                     } while (processedSectors.find(inputFile.tellg()) != processedSectors.end() ||
                              entry.channel != buffer[CHANNEL_OFFSET] || !isAudio());
@@ -262,6 +262,7 @@ private:
                 (entry.channel == buffer[CHANNEL_OFFSET] ||
                 (buffer[SUBMODE_OFFSET] & 0x7F) == 0)); // 0 or 0x80, standard null sector values
 
+    END:
         entry.endOff = currentOff;
         //outputFile.close();
         //printf("Done\n");
@@ -288,7 +289,7 @@ private:
             fprintf(manifest, "%d,%s,%s,%d,%d,%d" /*",0x%02X%02X%02X%02X"*/ ",%lld-%lld\n", entry.sectorChunk, inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd",
                     entry.fileName.c_str(), entry.nullTermination, entry.filenum, entry.channel,
                     /*entry.nullSubheader[0], entry.nullSubheader[1], entry.nullSubheader[2], entry.nullSubheader[3],*/
-                    entry.begOff / inputSectorSize, (entry.endOff / inputSectorSize) - ((entry.sectorStride + 1) * entry.nullTermination) - 1);
+                    entry.begOff / inputSectorSize, (entry.endOff / inputSectorSize) - (entry.nullTermination * (entry.sectorStride + 1)));
         }
         fclose(manifest);
     }
