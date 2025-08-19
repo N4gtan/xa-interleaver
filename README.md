@@ -115,7 +115,7 @@ chunk,type,file,null_termination,xa_file_number,xa_channel_number,xa_null_subhea
 >
 >15 for NTSC(USA/JAP) and 12.5 for PAL(EUR)
 >
->Then, to change the filenum or channel, the following trick can be done with the interleaver:
+>Then, to change filenum or channel, the following trick can be done using the interleaver with `<stride>` on `1`:
 ><details>
 ><summary>TrickSTR.csv</summary>
 >

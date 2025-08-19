@@ -60,7 +60,7 @@ public:
             else if (entry.sectorChunk > sectorStride ||
                      div_check < 0)
             {
-                fprintf(stderr, "Error: Consecutive sectors are not divisible by %d\n", sectorStride);
+                fprintf(stderr, "Error: Consecutive sectors exceed %d\n", sectorStride);
                 std::vector<FileInfo>().swap(entries);
                 return;
             }
@@ -164,7 +164,7 @@ public:
         std::vector<FileInfo> workingEntries = entries;
 
         int can_read = 0;
-        //int sectorsToFill = sectorStride;
+        int sectorsToFill = sectorStride;
         for (const auto &entry : workingEntries)
         {
             if (entry.sectorSize &&
@@ -176,11 +176,11 @@ public:
                     sectorSize = entry.sectorSize;
                 can_read++;
             }
-            //sectorsToFill -= entry.sectorChunk;
+            sectorsToFill -= entry.sectorChunk;
         }
         const int outOffset = CD_SECTOR_SIZE - sectorSize;
 
-        /*/ Fill with null sectors to achieve the desired stride
+        // Fill with null sectors to achieve the desired stride
         if (sectorsToFill > 0 &&
             sectorsToFill < sectorStride)
         {
@@ -189,11 +189,11 @@ public:
                 FileInfo &e = workingEntries.emplace_back();
                 e.filenum   = workingEntries[i].filenum;
             }
-        }*/
+        }
 
         while (can_read > 0)
         {
-            for (int i = 0; i < sectorStride && i < workingEntries.size(); ++i)
+            for (int i = 0; i < sectorStride/* && i < workingEntries.size()*/; ++i)
             {
                 FileInfo &entry = workingEntries[i];
                 std::ifstream &inputFile = inputFiles[i];
