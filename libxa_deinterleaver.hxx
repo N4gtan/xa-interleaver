@@ -31,28 +31,25 @@ public:
     // inputPath must be an interleaved .xa or .str file. CD image files may have unexpected results.
     explicit deinterleaver(const std::filesystem::path inputPath) : inputPath(inputPath)
     {
-        uintmax_t fileSize;
         std::ifstream inputFile(inputPath, std::ios::binary);
 
-        { // Error handling scope block
-            unsigned char sync[12];
-            if (!inputFile.read(reinterpret_cast<char *>(sync), sizeof(sync)))
-            {
-                fprintf(stderr, "Error: Cannot read \"%s\". %s\n", inputPath.filename().string().c_str(), strerror(errno));
-                return;
-            }
-            fileSize = std::filesystem::file_size(inputPath);
-            if (fileSize % CD_SECTOR_SIZE == 0 && memcmp(sync, buffer, sizeof(sync)) == 0)
-                inputSectorSize = CD_SECTOR_SIZE;
-            else if (fileSize % XA_DATA_SIZE == 0)
-                inputSectorSize = XA_DATA_SIZE;
-            else
-            {
-                fprintf(stderr, "Error: File \"%s\" is not aligned to 2336/2352 bytes.\n", inputPath.filename().string().c_str());
-                errno = EINVAL;
-                return;
-            }
-            inputFile.seekg(0, std::ios::beg);
+        if (!inputFile.read(reinterpret_cast<char *>(buffer) + FILENUM_OFFSET, 12))
+        {
+            fprintf(stderr, "Error: Cannot read \"%s\". %s\n", inputPath.filename().string().c_str(), strerror(errno));
+            return;
+        }
+        inputFile.seekg(0, std::ios::beg);
+
+        const uintmax_t fileSize = std::filesystem::file_size(inputPath);
+        if (fileSize % CD_SECTOR_SIZE == 0 && memcmp(buffer + FILENUM_OFFSET, buffer, 12) == 0)
+            inputSectorSize = CD_SECTOR_SIZE;
+        else if (fileSize % XA_DATA_SIZE == 0)
+            inputSectorSize = XA_DATA_SIZE;
+        else
+        {
+            fprintf(stderr, "Error: File \"%s\" is not aligned to 2336/2352 bytes.\n", inputPath.filename().string().c_str());
+            errno = EINVAL;
+            return;
         }
         offset = CD_SECTOR_SIZE - inputSectorSize;
 
