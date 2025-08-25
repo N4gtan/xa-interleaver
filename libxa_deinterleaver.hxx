@@ -61,7 +61,7 @@ public:
         printf("Analyzing %s...   0%%", inputPath.filename().string().c_str());
         while (inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
         {
-            if (isInvalid() || !isAudio())
+            if (!isAudio() || isNull())
                 continue;
 
             currentOff = inputFile.tellg();
@@ -154,14 +154,26 @@ protected:
 private:
     int offset{};
     const std::filesystem::path inputPath;
+    static constexpr int SOUND_GROUP_HEAD = 16;
+    static constexpr int SOUND_GROUP_SIZE = 128;
 
     unsigned char buffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
+    unsigned char emptyBuffer[SOUND_GROUP_SIZE - SOUND_GROUP_HEAD]{};
 
-    // Expandable function to handle non-standard null sectors.
-    bool isInvalid() const
+    bool isSilent() const
     {
-        // If channel number is 0xFF, it's a non-standard null sector.
-        return buffer[CHANNEL_OFFSET] == 0xFF;
+        return isNull(sizeof(emptyBuffer));
+    }
+
+    bool isNull(const int bytes = SOUND_GROUP_HEAD) const
+    {
+        int groups = ((buffer[SUBMODE_OFFSET] & 0x20) != 0 ? 18 : 16) * SOUND_GROUP_SIZE; // 0x20 = FORM2_MASK
+        for (int i = bytes != SOUND_GROUP_HEAD ? 0x28 : 0x18; i < groups; i += SOUND_GROUP_SIZE) // 0x28/0x18 = DATA_OFFSET
+        {
+            if (memcmp(buffer + i, emptyBuffer, bytes) != 0)
+                return false;
+        }
+        return true;
     }
 
     bool isAudio() const
@@ -176,40 +188,11 @@ private:
         entry.channel   = buffer[CHANNEL_OFFSET];
         entry.begOff    = currentOff - inputSectorSize;
         entry.fileName  = std::to_string(entries.size() - 1);
-        /*entry.fileName  = inputPath.stem().string() + "_"
-                        + std::string(std::max(static_cast<int>(sizeof("00") - entry.fileName.length()), 0), '0')
-                        + std::move(entry.fileName) + ".xa";
-
-        if (!std::filesystem::exists(outputDir))
-            std::filesystem::create_directories(outputDir);
-        std::ofstream outputFile(outputDir / entry.fileName, std::ios::binary);
-        if (!outputFile)
-        {
-            fprintf(stderr, "Error: Cannot write \"%s\". %s\n", entry.fileName.c_str(), strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-        else
-            printf("Deinterleaving %s... ", entry.fileName.c_str());*/
 
         int skipSize;
-        bool eof = false;
+        bool eof = buffer[SUBMODE_OFFSET] & 0x80; // 0x80 = EOF_MASK
+        bool silent = isSilent();
         do {
-            if (!isAudio() || (eof && [&]{unsigned char empty[2324]{};
-                                return memcmp(buffer + 0x18, empty, sizeof(empty)) == 0;}()))
-            {
-                entry.nullTermination++;
-                if (*reinterpret_cast<int *>(entry.nullSubheader) == 0)
-                    memcpy(&entry.nullSubheader, &buffer[FILENUM_OFFSET], sizeof(entry.nullSubheader));
-            }
-            else if (entry.nullTermination || eof)
-                goto END;
-            else
-            {
-                if (buffer[SUBMODE_OFFSET] & 0x80) // 0x80 = EOF_MASK
-                    eof = true;
-                //outputFile.write(reinterpret_cast<const char *>(buffer) + offset, sectorSize);
-            }
-
             entry.sectorCount++;
             currentOff = inputFile.tellg();
             processedSectors.insert(currentOff);
@@ -225,12 +208,8 @@ private:
                     inputFile.clear();
                     goto END;
                 }
-                // Set file number and submode to standard null sector values
-                if (isInvalid())
-                {
-                    buffer[FILENUM_OFFSET] = entry.filenum;
-                    buffer[SUBMODE_OFFSET] = 0x00;
-                }
+                if (processedSectors.find(inputFile.tellg()) != processedSectors.end())
+                    goto END;
             }
             else // Calculate sectorStride and skipSize
             {
@@ -240,8 +219,8 @@ private:
                     goto END;
                 }
                 // Check if the next sector has different channel or submode.
-                if (processedSectors.find(inputFile.tellg()) != processedSectors.end() ||
-                    entry.channel != buffer[CHANNEL_OFFSET] || !isAudio())
+                if (!eof && (processedSectors.find(inputFile.tellg()) != processedSectors.end() ||
+                    entry.channel != buffer[CHANNEL_OFFSET] || !isAudio()))
                 {
                     do {
                         entry.sectorStride++;
@@ -257,20 +236,38 @@ private:
                     skipSize = entry.sectorStride * inputSectorSize;
                 }
             }
-        } while (processedSectors.find(inputFile.tellg()) == processedSectors.end() &&
-                 entry.filenum == buffer[FILENUM_OFFSET] &&
-                (entry.channel == buffer[CHANNEL_OFFSET] ||
-                (buffer[SUBMODE_OFFSET] & 0x7F) == 0)); // 0 or 0x80, standard null sector values
+
+            if (entry.filenum != buffer[FILENUM_OFFSET])
+                goto END;
+            else if ((entry.nullTermination && entry.nullSubheader[1] == buffer[CHANNEL_OFFSET] &&
+                     (entry.nullSubheader[2] | 0x80) == (buffer[SUBMODE_OFFSET] | 0x80) && isNull()) ||
+                    (!entry.nullTermination && isNull()))
+            {
+                if (!entry.nullTermination++)
+                    memcpy(&entry.nullSubheader, &buffer[FILENUM_OFFSET], sizeof(entry.nullSubheader));
+            }
+            else if (entry.nullTermination || eof ||
+                     entry.channel != buffer[CHANNEL_OFFSET])
+                goto END;
+            else
+            {
+                eof = buffer[SUBMODE_OFFSET] & 0x80; // 0x80 = EOF_MASK
+                if (silent)
+                    silent = isSilent();
+            }
+        } while (true);
 
     END:
         entry.endOff = currentOff;
-        //outputFile.close();
-        //printf("Done\n");
 
         if (entry.sectorStride)
             inputFile.seekg(entry.begOff + inputSectorSize, std::ios::beg);
         else
             inputFile.seekg(entry.endOff, std::ios::beg);
+
+        // Remove silence-only files.
+        if (silent)
+            entries.pop_back();
     }
 
     // Virtual function to fill the manifest as needed.
@@ -289,7 +286,7 @@ private:
             fprintf(manifest, "%d,%s,%s,%d,%d,%d" /*",0x%02X%02X%02X%02X"*/ ",%lld-%lld\n", entry.sectorChunk, inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd",
                     entry.fileName.c_str(), entry.nullTermination, entry.filenum, entry.channel,
                     /*entry.nullSubheader[0], entry.nullSubheader[1], entry.nullSubheader[2], entry.nullSubheader[3],*/
-                    entry.begOff / inputSectorSize, (entry.endOff / inputSectorSize) - (entry.nullTermination * (entry.sectorStride + 1)));
+                    entry.begOff / inputSectorSize, (entry.endOff / inputSectorSize) - (entry.nullTermination * (entry.sectorStride + 1)) - 1);
         }
         fclose(manifest);
     }
