@@ -20,8 +20,8 @@ public:
         int sectorCount;
         int sectorStride;
         int nullTermination;
-        int filenum;
-        int channel;
+        uint8_t filenum;
+        uint8_t channel;
         alignas(int) uint8_t nullSubheader[4];
         std::streamoff begOff;
         std::streamoff endOff;
@@ -40,7 +40,7 @@ public:
         }
         inputFile.seekg(0, std::ios::beg);
 
-        const uintmax_t fileSize = std::filesystem::file_size(inputPath);
+        const unsigned long long fileSize = std::filesystem::file_size(inputPath);
         if (fileSize % CD_SECTOR_SIZE == 0 && memcmp(buffer + FILENUM_OFFSET, buffer, 12) == 0)
             inputSectorSize = CD_SECTOR_SIZE;
         else if (fileSize % XA_DATA_SIZE == 0)
@@ -280,10 +280,10 @@ private:
         fprintf(manifest, "chunk,type,file,null_termination,xa_file_number,xa_channel_number" /*",xa_null_subheader"*/ ",sector_beg-end\n");
         for (const FileInfo &entry : entries)
         {
-            fprintf(manifest, "%d,%s,%s,%d,%d,%d" /*",0x%02X%02X%02X%02X"*/ ",%lld-%lld\n", entry.sectorChunk, inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd",
+            fprintf(manifest, "%d,%s,%s,%d,%hhu,%hhu" /*",0x%02X%02X%02X%02X"*/ ",%lld-%lld\n", entry.sectorChunk, inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd",
                     entry.fileName.c_str(), entry.nullTermination, entry.filenum, entry.channel,
                     /*entry.nullSubheader[0], entry.nullSubheader[1], entry.nullSubheader[2], entry.nullSubheader[3],*/
-                    entry.begOff / inputSectorSize, (entry.endOff / inputSectorSize) - (entry.nullTermination * (entry.sectorStride + 1)) - 1);
+                    (long long)entry.begOff / inputSectorSize, (long long)(entry.endOff / inputSectorSize) - (entry.nullTermination * (entry.sectorStride + 1)) - 1);
         }
         fclose(manifest);
     }
