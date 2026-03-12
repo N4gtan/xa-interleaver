@@ -12,7 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
-#include <string.h>
+#include <cstring>
 #include <optional>
 
 class interleaver
@@ -20,9 +20,9 @@ class interleaver
 public:
     struct FileInfo
     {
+        std::filesystem::path filePath;
         int sectorChunk = 1;
         int sectorSize;
-        std::filesystem::path filePath;
         int nullTermination;
         std::optional<uint8_t> filenum;
         std::optional<uint8_t> channel;
@@ -34,9 +34,9 @@ public:
     };
     std::vector<FileInfo> entries;
 
-    // inputPath must be a .csv or .txt or any text file with the appropriate format.
+    // inputPath must be a .csv or .txt or any UTF-8 encoded text file with the appropriate format.
     // sectorStride must be like the psx XA format (2/4/8/16/32).
-    explicit interleaver(const std::filesystem::path inputPath, const int sectorStride) : sectorStride(sectorStride)
+    explicit interleaver(const std::filesystem::path &inputPath, const int sectorStride) : sectorStride(sectorStride)
     {
         std::ifstream inputFile(inputPath);
         if (!inputFile.is_open())
@@ -66,11 +66,11 @@ public:
             }
 
             if (!(field = strtok_r(NULL, ",", &saveptr)) ||
-                !strncasecmp(field, "null", 4))
+                strncasecmp(field, "null", 4) == 0)
                 entry.sectorSize = 0;
-            else if (!strncasecmp(field, "xacd", 4))
+            else if (strncasecmp(field, "xacd", 4) == 0)
                 entry.sectorSize = CD_SECTOR_SIZE;
-            else if (!strncasecmp(field, "xa", 2))
+            else if (strncasecmp(field, "xa", 2) == 0)
                 entry.sectorSize = XA_DATA_SIZE;
             else
             {
@@ -78,11 +78,11 @@ public:
                 continue;
             }
 
-            if (entry.sectorSize)
+            if (entry.sectorSize > 0)
             {
                 if ((field = strtok_r(NULL, ",", &saveptr)))
                 {
-                    entry.filePath = inputPath.parent_path() / field;
+                    entry.filePath = inputPath.parent_path() / std::filesystem::u8path(field);
                     std::ifstream input(entry.filePath, std::ios::binary);
                     if (!input.is_open())
                     {
@@ -93,8 +93,8 @@ public:
                     input.close();
 
                     entry.fileSize = std::filesystem::file_size(entry.filePath);
-                    if (!entry.fileSize ||
-                        entry.fileSize % entry.sectorSize)
+                    if (entry.fileSize == 0 ||
+                        entry.fileSize % entry.sectorSize != 0)
                     {
                         fprintf(stderr, "Error: Invalid type for \"%s\" at line %zu\n", field, entries.size() + 1);
                         std::vector<FileInfo>().swap(entries);
@@ -130,10 +130,7 @@ public:
                 }
 
                 if (div_check - entry.sectorChunk >= 0)
-                {
                     entry.begSec = entries.size();
-                    entry.endSec = (entry.fileSize / entry.sectorSize + entry.nullTermination) * sectorStride + entry.begSec;
-                }
                 else
                 {
                     size_t minSec = SIZE_MAX;
@@ -144,11 +141,11 @@ public:
                             minSec = e.endSec;
                     }
                     entry.begSec = lastMinSec = minSec;
-                    entry.endSec = (entry.fileSize / entry.sectorSize + entry.nullTermination) * sectorStride + entry.begSec;
                 }
+                entry.endSec = (entry.sectorCount + entry.nullTermination) * sectorStride + entry.begSec;
             }
 
-            if (div_check)
+            if (div_check > 0)
                 div_check -= entry.sectorChunk;
             entries.push_back(std::move(entry));
         }
@@ -158,8 +155,8 @@ public:
     // sectorSize must be 2336 or 2352 to change the output size.
     void interleave(std::fstream &outputFile, int sectorSize = 0)
     {
-        unsigned char buffer[CD_SECTOR_SIZE];
-        unsigned char emptyBuffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
+        uint8_t buffer[CD_SECTOR_SIZE]{};
+        uint8_t emptyBuffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
         std::vector<std::ifstream> inputFiles(sectorStride);
         std::vector<FileInfo> workingEntries = entries;
 
@@ -167,12 +164,12 @@ public:
         int sectorsToFill = sectorStride;
         for (const auto &entry : workingEntries)
         {
-            if (entry.sectorSize &&
+            if (entry.sectorSize > 0 &&
                 !entry.filePath.empty())
             {
                 if (can_read < sectorStride)
                     inputFiles[can_read].open(entry.filePath, std::ios::binary);
-                if (!sectorSize)
+                if (sectorSize == 0)
                     sectorSize = entry.sectorSize;
                 can_read++;
             }
@@ -225,7 +222,7 @@ public:
                     printf("Interleaving %s... Done\n", entry.filePath.filename().string().c_str());
                     if (sectorStride < workingEntries.size())
                     {
-                        entry = workingEntries[sectorStride];
+                        entry = std::move(workingEntries[sectorStride]);
                         inputFile.open(entry.filePath, std::ios::binary);
                         workingEntries.erase(workingEntries.begin() + sectorStride);
                     }
@@ -252,7 +249,7 @@ private:
     const int sectorStride;
 
     // Virtual function to fill null sectors as needed.
-    virtual void nullCustomizer(unsigned char *emptyBuffer, FileInfo &entry)
+    virtual void nullCustomizer(uint8_t *emptyBuffer, FileInfo &entry)
     {
         if (*reinterpret_cast<int *>(entry.nullSubheader) != 0)
             return;

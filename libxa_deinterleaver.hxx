@@ -7,7 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
-#include <string.h>
+#include <cstring>
 #include <set>
 
 class deinterleaver
@@ -29,7 +29,7 @@ public:
     std::vector<FileInfo> entries;
 
     // inputPath must be an interleaved .xa or .str file. CD image files may have unexpected results.
-    explicit deinterleaver(const std::filesystem::path inputPath) : inputPath(inputPath)
+    explicit deinterleaver(const std::filesystem::path &inputPath) : inputPath(inputPath)
     {
         std::ifstream inputFile(inputPath, std::ios::binary);
 
@@ -90,12 +90,12 @@ public:
 
     // outputDir must be a directory (not a file).
     // sectorSize must be 2336 or 2352 to change the output size.
-    void deinterleave(const std::filesystem::path outputDir, int sectorSize = 0)
+    void deinterleave(const std::filesystem::path &outputDir, int sectorSize = 0)
     {
         if (entries.empty())
             return;
 
-        if (!sectorSize)
+        if (sectorSize == 0)
             sectorSize = inputSectorSize;
         const int outOffset = CD_SECTOR_SIZE - sectorSize;
 
@@ -103,12 +103,12 @@ public:
             std::filesystem::create_directories(outputDir);
 
         std::ifstream inputFile(inputPath, std::ios::binary);
-        std::string namePrefix = inputPath.stem().string() + "_";
-        size_t namePadWidth = std::max(std::to_string(entries.size() - 1).length(), (std::size_t)2);
+        std::string namePrefix = inputPath.stem().u8string() + "_";
+        size_t namePadWidth = std::max<size_t>(std::to_string(entries.size() - 1).length(), 2);
         for (FileInfo &entry : entries)
         {
             entry.fileName = namePrefix + std::string(namePadWidth - entry.fileName.length(), '0') + std::move(entry.fileName) + ".xa";
-            std::ofstream outputFile(outputDir / entry.fileName, std::ios::binary);
+            std::ofstream outputFile(outputDir / std::filesystem::u8path(entry.fileName), std::ios::binary);
             if (!outputFile)
             {
                 fprintf(stderr, "Error: Cannot write \"%s\". %s\n", entry.fileName.c_str(), strerror(errno));
@@ -141,7 +141,7 @@ public:
     }
 
 protected:
-    int inputSectorSize{};
+    int inputSectorSize = 0;
     static constexpr int CD_SECTOR_SIZE = 2352;
     static constexpr int XA_DATA_SIZE   = 2336;
     static constexpr int FILENUM_OFFSET = 0x10;
@@ -149,13 +149,13 @@ protected:
     static constexpr int SUBMODE_OFFSET = 0x12;
 
 private:
-    int offset{};
+    int offset = 0;
     const std::filesystem::path inputPath;
     static constexpr int SOUND_GROUP_HEAD = 16;
     static constexpr int SOUND_GROUP_SIZE = 128;
 
-    unsigned char buffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
-    unsigned char emptyBuffer[SOUND_GROUP_SIZE - SOUND_GROUP_HEAD]{};
+    uint8_t buffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
+    uint8_t emptyBuffer[SOUND_GROUP_SIZE - SOUND_GROUP_HEAD]{};
 
     bool isSilent() const
     {
@@ -180,11 +180,10 @@ private:
 
     void parse(std::ifstream &inputFile, std::streamoff &currentOff, std::set<std::streamoff> &processedSectors)
     {
-        FileInfo &entry = entries.emplace_back();
-        entry.filenum   = buffer[FILENUM_OFFSET];
-        entry.channel   = buffer[CHANNEL_OFFSET];
-        entry.begOff    = currentOff - inputSectorSize;
-        entry.fileName  = std::to_string(entries.size() - 1);
+        FileInfo entry{};
+        entry.filenum = buffer[FILENUM_OFFSET];
+        entry.channel = buffer[CHANNEL_OFFSET];
+        entry.begOff  = currentOff - inputSectorSize;
 
         int skipSize;
         bool eof = buffer[SUBMODE_OFFSET] & 0x80; // 0x80 = EOF_MASK
@@ -197,7 +196,7 @@ private:
                 //currentOff = *std::prev(std::prev(processedSectors.end()));   // Debug breakpoint
             //currentOff = *std::prev(processedSectors.end());                  //
 
-            if (entry.sectorStride)
+            if (entry.sectorStride > 0)
             {
                 inputFile.seekg(skipSize, std::ios::cur);
                 if (!inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
@@ -208,7 +207,7 @@ private:
                 if (processedSectors.find(inputFile.tellg()) != processedSectors.end())
                     goto END;
             }
-            else // Calculate sectorStride and skipSize
+            else
             {
                 if (!inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
                 {
@@ -219,6 +218,7 @@ private:
                 if (!eof && (processedSectors.find(inputFile.tellg()) != processedSectors.end() ||
                     entry.channel != buffer[CHANNEL_OFFSET] || !isAudio()))
                 {
+                    // Calculate sectorStride and skipSize
                     do {
                         entry.sectorStride++;
                         if (!inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
@@ -236,11 +236,11 @@ private:
 
             if (entry.filenum != buffer[FILENUM_OFFSET])
                 goto END;
-            else if ((entry.nullTermination && entry.nullSubheader[1] == buffer[CHANNEL_OFFSET] &&
+            else if ((entry.nullTermination > 0 && entry.nullSubheader[1] == buffer[CHANNEL_OFFSET] &&
                      (entry.nullSubheader[2] | 0x80) == (buffer[SUBMODE_OFFSET] | 0x80) && isNull()) ||
-                    (!entry.nullTermination && isNull()))
+                    (entry.nullTermination == 0 && isNull()))
             {
-                if (!entry.nullTermination++)
+                if (entry.nullTermination++ == 0)
                     memcpy(&entry.nullSubheader, &buffer[FILENUM_OFFSET], sizeof(entry.nullSubheader));
             }
             else if (entry.nullTermination || eof ||
@@ -257,20 +257,23 @@ private:
     END:
         entry.endOff = currentOff;
 
-        if (entry.sectorStride)
-            inputFile.seekg(entry.begOff + inputSectorSize, std::ios::beg);
-        else
-            inputFile.seekg(entry.endOff, std::ios::beg);
+        if (entry.sectorStride > 0)
+            currentOff = entry.begOff + inputSectorSize;
 
-        // Remove silence-only files.
+        inputFile.seekg(currentOff, std::ios::beg);
+
+        // Skip silence-only files.
         if (silent)
-            entries.pop_back();
+            return;
+
+        entry.fileName = std::to_string(entries.size());
+        entries.push_back(std::move(entry));
     }
 
     // Virtual function to fill the manifest as needed.
     virtual void createManifest(const std::filesystem::path &outputDir, const std::string &fileName)
     {
-        FILE *manifest = fopen((outputDir / fileName).string().c_str(), "w");
+        FILE *manifest = fopen((outputDir / fileName).string().c_str(), "wb");
         if (!manifest)
         {
             fprintf(stderr, "Error: Cannot write manifest \"%s\". %s\n", fileName.c_str(), strerror(errno));
