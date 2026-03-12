@@ -215,7 +215,7 @@ private:
                     goto END;
                 }
                 // Check if the next sector has different channel or submode.
-                if (!eof && (processedSectors.find(inputFile.tellg()) != processedSectors.end() ||
+                if (!eof && entry.sectorCount < 32 && (processedSectors.find(inputFile.tellg()) != processedSectors.end() ||
                     entry.channel != buffer[CHANNEL_OFFSET] || !isAudio()))
                 {
                     // Calculate sectorStride and skipSize
