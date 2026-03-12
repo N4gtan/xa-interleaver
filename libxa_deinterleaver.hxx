@@ -32,10 +32,17 @@ public:
     explicit deinterleaver(const std::filesystem::path &inputPath) : inputPath(inputPath)
     {
         std::ifstream inputFile(inputPath, std::ios::binary);
-
-        if (!inputFile.read(reinterpret_cast<char *>(buffer) + FILENUM_OFFSET, 12))
+        if (!inputFile)
         {
             fprintf(stderr, "Error: Cannot read \"%s\". %s\n", inputPath.filename().string().c_str(), strerror(errno));
+            return;
+        }
+
+        if (!inputFile.read(reinterpret_cast<char *>(buffer) + FILENUM_OFFSET, XA_DATA_SIZE))
+        {
+        not_aligned:
+            fprintf(stderr, "Error: File \"%s\" is not aligned to 2336/2352 bytes.\n", inputPath.filename().string().c_str());
+            errno = EINVAL;
             return;
         }
         inputFile.seekg(0, std::ios::beg);
@@ -46,11 +53,7 @@ public:
         else if (fileSize % XA_DATA_SIZE == 0)
             inputSectorSize = XA_DATA_SIZE;
         else
-        {
-            fprintf(stderr, "Error: File \"%s\" is not aligned to 2336/2352 bytes.\n", inputPath.filename().string().c_str());
-            errno = EINVAL;
-            return;
-        }
+            goto not_aligned;
         offset = CD_SECTOR_SIZE - inputSectorSize;
         const intmax_t totalSectors = fileSize / inputSectorSize;
 

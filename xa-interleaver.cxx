@@ -27,10 +27,16 @@ int main(int argc, char *argv[])
     }
 
     const std::filesystem::path outputPath = argc >= 4 ? argv[3] : inputFile.stem() += "_NEW.XA";
-    std::fstream output(outputPath, std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
-    files.interleave(output, sectorSize);
+    std::fstream outputFile(outputPath, std::ios::binary | std::ios::in | std::ios::out | std::ios::trunc);
+    if (!outputFile)
+    {
+        fprintf(stderr, "Error: Cannot write \"%s\". %s\n", outputPath.string().c_str(), strerror(errno));
+        return EXIT_FAILURE;
+    }
 
-    output.close();
+    files.interleave(outputFile, sectorSize);
+
+    outputFile.close();
 
     printf("Process complete.\n");
 

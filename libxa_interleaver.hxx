@@ -38,7 +38,7 @@ public:
     explicit interleaver(const std::filesystem::path &inputPath, const int sectorStride) : sectorStride(sectorStride)
     {
         std::ifstream inputFile(inputPath);
-        if (!inputFile.is_open())
+        if (!inputFile)
         {
             fprintf(stderr, "Error: Cannot read \"%s\". %s\n", inputPath.filename().string().c_str(), strerror(errno));
             return;
@@ -83,7 +83,7 @@ public:
                 {
                     entry.filePath = inputPath.parent_path() / std::filesystem::u8path(field);
                     std::ifstream input(entry.filePath, std::ios::binary);
-                    if (!input.is_open())
+                    if (!input)
                     {
                         fprintf(stderr, "Error: Cannot read \"%s\" at line %zu. %s\n", entry.filePath.string().c_str(), entries.size() + 1, strerror(errno));
                         std::vector<FileInfo>().swap(entries);
