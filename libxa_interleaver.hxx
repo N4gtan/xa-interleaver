@@ -22,13 +22,12 @@ public:
     {
         std::filesystem::path filePath;
         int sectorChunk = 1;
+        int sectorCount;
         int sectorSize;
         int nullTermination;
         std::optional<uint8_t> filenum;
         std::optional<uint8_t> channel;
         alignas(int) uint8_t nullSubheader[4];
-
-        uintmax_t fileSize;
         int begSec;
         int endSec;
     };
@@ -92,14 +91,15 @@ public:
                     }
                     input.close();
 
-                    entry.fileSize = std::filesystem::file_size(entry.filePath);
-                    if (entry.fileSize == 0 ||
-                        entry.fileSize % entry.sectorSize != 0)
+                    const uintmax_t fileSize = std::filesystem::file_size(entry.filePath);
+                    if (fileSize == 0 ||
+                        fileSize % entry.sectorSize != 0)
                     {
                         fprintf(stderr, "Error: Invalid type for \"%s\" at line %zu\n", field, entries.size() + 1);
                         std::vector<FileInfo>().swap(entries);
                         return;
                     }
+                    entry.sectorCount = fileSize / entry.sectorSize;
                 }
                 else
                 {
@@ -157,7 +157,7 @@ public:
     {
         uint8_t buffer[CD_SECTOR_SIZE]{};
         uint8_t emptyBuffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
-        std::vector<std::ifstream> inputFiles(sectorStride);
+        std::vector<std::pair<std::ifstream, int>> inputFiles(sectorStride);
         std::vector<FileInfo> workingEntries = entries;
 
         int can_read = 0;
@@ -168,7 +168,7 @@ public:
                 !entry.filePath.empty())
             {
                 if (can_read < sectorStride)
-                    inputFiles[can_read].open(entry.filePath, std::ios::binary);
+                    inputFiles[can_read].first.open(entry.filePath, std::ios::binary);
                 if (sectorSize == 0)
                     sectorSize = entry.sectorSize;
                 can_read++;
@@ -193,13 +193,14 @@ public:
             for (int i = 0; i < sectorStride/* && i < workingEntries.size()*/; ++i)
             {
                 FileInfo &entry = workingEntries[i];
-                std::ifstream &inputFile = inputFiles[i];
+                auto &[inputFile, currentSector] = inputFiles[i];
 
                 for (int is = 0; is < entry.sectorChunk; ++is)
                 {
                     if (entry.sectorSize &&
                         inputFile.read(reinterpret_cast<char *>(buffer) + (CD_SECTOR_SIZE - entry.sectorSize), entry.sectorSize))
                     {
+                        currentSector++;
                         buffer[FILENUM_OFFSET + 4] = buffer[FILENUM_OFFSET] = entry.filenum.value_or(buffer[FILENUM_OFFSET]);
                         buffer[CHANNEL_OFFSET + 4] = buffer[CHANNEL_OFFSET] = entry.channel.value_or(buffer[CHANNEL_OFFSET]);
                         outputFile.write(reinterpret_cast<const char *>(buffer) + outOffset, sectorSize);
@@ -215,7 +216,7 @@ public:
                 }
 
                 if (inputFile.is_open() &&
-                    inputFile.tellg() >= entry.fileSize &&
+                    currentSector >= entry.sectorCount &&
                     entry.nullTermination-- <= 0)
                 {
                     inputFile.close();
@@ -225,6 +226,7 @@ public:
                         entry = std::move(workingEntries[sectorStride]);
                         inputFile.open(entry.filePath, std::ios::binary);
                         workingEntries.erase(workingEntries.begin() + sectorStride);
+                        currentSector = 0;
                     }
                     can_read--;
                 }

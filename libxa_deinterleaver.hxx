@@ -8,7 +8,7 @@
 #include <fstream>
 #include <vector>
 #include <cstring>
-#include <set>
+#include <algorithm>
 
 class deinterleaver
 {
@@ -23,8 +23,8 @@ public:
         uint8_t filenum;
         uint8_t channel;
         alignas(int) uint8_t nullSubheader[4];
-        std::streamoff begOff;
-        std::streamoff endOff;
+        int begSec;
+        int endSec;
     };
     std::vector<FileInfo> entries;
 
@@ -40,7 +40,7 @@ public:
         }
         inputFile.seekg(0, std::ios::beg);
 
-        const unsigned long long fileSize = std::filesystem::file_size(inputPath);
+        const uintmax_t fileSize = std::filesystem::file_size(inputPath);
         if (fileSize % CD_SECTOR_SIZE == 0 && memcmp(buffer + FILENUM_OFFSET, buffer, 12) == 0)
             inputSectorSize = CD_SECTOR_SIZE;
         else if (fileSize % XA_DATA_SIZE == 0)
@@ -52,34 +52,30 @@ public:
             return;
         }
         offset = CD_SECTOR_SIZE - inputSectorSize;
+        const intmax_t totalSectors = fileSize / inputSectorSize;
 
-        std::streamoff currentOff;
-        std::set<std::streamoff> processedSectors;
+        intmax_t currentSector = 0;
+        std::vector<bool> processedSectors(totalSectors, false);
         printf("Analyzing %s...   0%%", inputPath.filename().string().c_str());
         while (inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
         {
             if (!isAudio() || isNull())
-                continue;
-
-            currentOff = inputFile.tellg();
-
-            // Skip sectors that has already been processed.
-            if (auto prev = processedSectors.find(currentOff); prev != processedSectors.end())
             {
-                for (auto it = prev; ++it != processedSectors.end();)
-                {
-                    if (*it > *prev + inputSectorSize)
-                        break;
-                    prev = it;
-                }
-                if (*prev != currentOff)
-                    inputFile.seekg(*prev, std::ios::beg);
-                //processedSectors.erase(processedSectors.begin(), std::next(prev));
+                currentSector++;
                 continue;
             }
 
-            printf("\b\b\b\b%3llu%%", (currentOff * 100) / fileSize);
-            parse(inputFile, currentOff, processedSectors);
+            // Skip sectors that has already been processed.
+            if (processedSectors[currentSector])
+            {
+                auto nextUnprocessed = std::find(processedSectors.begin() + currentSector, processedSectors.end(), false);
+                currentSector = std::distance(processedSectors.begin(), nextUnprocessed);
+                inputFile.seekg(currentSector * inputSectorSize, std::ios::beg);
+                continue;
+            }
+
+            printf("\b\b\b\b%3jd%%", (currentSector * 100) / totalSectors);
+            parse(inputFile, currentSector, processedSectors);
         }
         inputFile.close();
         printf("\b\b\b\b100%%\n");
@@ -117,8 +113,9 @@ public:
             else
                 printf("Deinterleaving %s... ", entry.fileName.c_str());
 
-            inputFile.seekg(entry.begOff, std::ios::beg);
-            std::streamoff limit = entry.endOff - (entry.nullTermination * (entry.sectorStride + 1) * inputSectorSize);
+            int curSec = entry.begSec;
+            int endSec = entry.endSec - (entry.nullTermination * (entry.sectorStride + 1));
+            inputFile.seekg(static_cast<std::streamoff>(curSec) * inputSectorSize, std::ios::beg);
             do {
                 int i = 0;
                 do {
@@ -130,7 +127,7 @@ public:
                     outputFile.write(reinterpret_cast<const char *>(buffer) + outOffset, sectorSize);
                 } while (++i < entry.sectorChunk);
                 inputFile.seekg(entry.sectorStride * inputSectorSize, std::ios::cur);
-            } while (inputFile.tellg() < limit);
+            } while ((curSec += entry.sectorChunk + entry.sectorStride) < endSec);
 
         END:
             outputFile.close();
@@ -178,23 +175,23 @@ private:
         return buffer[SUBMODE_OFFSET] & 0x04; // 0x04 = AUDIO_MASK
     }
 
-    void parse(std::ifstream &inputFile, std::streamoff &currentOff, std::set<std::streamoff> &processedSectors)
+    void parse(std::ifstream &inputFile, intmax_t &currentSector, std::vector<bool> &processedSectors)
     {
         FileInfo entry{};
         entry.filenum = buffer[FILENUM_OFFSET];
         entry.channel = buffer[CHANNEL_OFFSET];
-        entry.begOff  = currentOff - inputSectorSize;
+        entry.begSec  = currentSector;
 
         int skipSize;
         bool eof = buffer[SUBMODE_OFFSET] & 0x80; // 0x80 = EOF_MASK
         bool silent = isSilent();
         do {
             entry.sectorCount++;
-            currentOff = inputFile.tellg();
-            processedSectors.insert(currentOff);
-            //if (currentOff >= 99219120)                                       //
-                //currentOff = *std::prev(std::prev(processedSectors.end()));   // Debug breakpoint
-            //currentOff = *std::prev(processedSectors.end());                  //
+            currentSector += entry.sectorStride;
+            processedSectors[currentSector++] = true;
+            //if (currentSector >= 42185)                                                                              //
+                //for (; currentSector > 0 && !processedSectors[--currentSector];);                                    // Debug breakpoint
+            //for (currentSector = processedSectors.size(); currentSector > 0 && !processedSectors[--currentSector];); //
 
             if (entry.sectorStride > 0)
             {
@@ -204,7 +201,7 @@ private:
                     inputFile.clear();
                     goto END;
                 }
-                if (processedSectors.find(inputFile.tellg()) != processedSectors.end())
+                if (processedSectors[currentSector + entry.sectorStride])
                     goto END;
             }
             else
@@ -215,7 +212,7 @@ private:
                     goto END;
                 }
                 // Check if the next sector has different channel or submode.
-                if (!eof && entry.sectorCount < 32 && (processedSectors.find(inputFile.tellg()) != processedSectors.end() ||
+                if (!eof && entry.sectorCount < 32 && (processedSectors[currentSector] ||
                     entry.channel != buffer[CHANNEL_OFFSET] || !isAudio()))
                 {
                     // Calculate sectorStride and skipSize
@@ -226,7 +223,7 @@ private:
                             inputFile.clear();
                             goto END;
                         }
-                    } while (processedSectors.find(inputFile.tellg()) != processedSectors.end() ||
+                    } while (processedSectors[currentSector + entry.sectorStride] ||
                              entry.channel != buffer[CHANNEL_OFFSET] || !isAudio());
 
                     entry.sectorChunk = entry.sectorCount;
@@ -255,12 +252,12 @@ private:
         } while (true);
 
     END:
-        entry.endOff = currentOff;
+        entry.endSec = currentSector;
 
         if (entry.sectorStride > 0)
-            currentOff = entry.begOff + inputSectorSize;
+            currentSector = entry.begSec + 1;
 
-        inputFile.seekg(currentOff, std::ios::beg);
+        inputFile.seekg(currentSector * inputSectorSize, std::ios::beg);
 
         // Skip silence-only files.
         if (silent)
@@ -283,10 +280,10 @@ private:
         fprintf(manifest, "chunk,type,file,null_termination,xa_file_number,xa_channel_number" /*",xa_null_subheader"*/ ",sector_beg-end\n");
         for (const FileInfo &entry : entries)
         {
-            fprintf(manifest, "%d,%s,%s,%d,%hhu,%hhu" /*",0x%02X%02X%02X%02X"*/ ",%lld-%lld\n", entry.sectorChunk, inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd",
+            fprintf(manifest, "%d,%s,%s,%d,%hhu,%hhu" /*",0x%02X%02X%02X%02X"*/ ",%d-%d\n", entry.sectorChunk, inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd",
                     entry.fileName.c_str(), entry.nullTermination, entry.filenum, entry.channel,
                     /*entry.nullSubheader[0], entry.nullSubheader[1], entry.nullSubheader[2], entry.nullSubheader[3],*/
-                    (long long)entry.begOff / inputSectorSize, (long long)(entry.endOff / inputSectorSize) - (entry.nullTermination * (entry.sectorStride + 1)) - 1);
+                    entry.begSec, entry.endSec - (entry.nullTermination * (entry.sectorStride + 1)) - 1);
         }
         fclose(manifest);
     }
