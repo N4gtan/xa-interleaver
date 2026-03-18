@@ -150,6 +150,7 @@ public:
             entries.push_back(std::move(entry));
         }
     }
+    virtual ~interleaver() = default;
 
     // outputFile must be opened in read and write binary (w+b) mode.
     // sectorSize must be 2336 or 2352 to change the output size.

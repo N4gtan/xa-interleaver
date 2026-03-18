@@ -86,6 +86,7 @@ public:
         if (entries.empty())
             printf("No valid entries found.\n");
     }
+    virtual ~deinterleaver() = default;
 
     // outputDir must be a directory (not a file).
     // sectorSize must be 2336 or 2352 to change the output size.
