@@ -1,11 +1,12 @@
 #pragma once
 
 #ifdef _MSC_VER
+#undef fseeko
+#define fseeko _fseeki64
 #include <string>
 #endif
 
 #include <filesystem>
-#include <fstream>
 #include <vector>
 #include <cstring>
 #include <algorithm>
@@ -31,21 +32,23 @@ public:
     // inputPath must be an interleaved .xa or .str file. CD image files may have unexpected results.
     explicit deinterleaver(const std::filesystem::path &inputPath) : inputPath(inputPath)
     {
-        std::ifstream inputFile(inputPath, std::ios::binary);
+        std::unique_ptr<FILE, decltype(&fclose)> inputFile(fopen(inputPath.string().c_str(), "rb"), &fclose);
         if (!inputFile)
         {
             fprintf(stderr, "Error: Cannot read \"%s\". %s\n", inputPath.filename().string().c_str(), strerror(errno));
             return;
         }
+        std::unique_ptr<char []> stdiBuf(new char[STDIO_IOFBF_SIZE]);
+        setvbuf(inputFile.get(), stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
 
-        if (!inputFile.read(reinterpret_cast<char *>(buffer) + FILENUM_OFFSET, XA_DATA_SIZE))
+        if (fread(buffer + FILENUM_OFFSET, 1, XA_DATA_SIZE, inputFile.get()) != XA_DATA_SIZE)
         {
         not_aligned:
             fprintf(stderr, "Error: File \"%s\" is not aligned to 2336/2352 bytes.\n", inputPath.filename().string().c_str());
             errno = EINVAL;
             return;
         }
-        inputFile.seekg(0, std::ios::beg);
+        fseeko(inputFile.get(), 0, SEEK_SET);
 
         const uintmax_t fileSize = std::filesystem::file_size(inputPath);
         if (fileSize % CD_SECTOR_SIZE == 0 && memcmp(buffer + FILENUM_OFFSET, buffer, 12) == 0)
@@ -60,7 +63,7 @@ public:
         intmax_t currentSector = 0;
         std::vector<bool> processedSectors(totalSectors, false);
         printf("Analyzing %s...   0%%", inputPath.filename().string().c_str());
-        while (inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
+        while (fread(buffer + offset, 1, inputSectorSize, inputFile.get()) == inputSectorSize)
         {
             if (!isAudio() || isNull())
             {
@@ -73,14 +76,13 @@ public:
             {
                 auto nextUnprocessed = std::find(processedSectors.begin() + currentSector, processedSectors.end(), false);
                 currentSector = std::distance(processedSectors.begin(), nextUnprocessed);
-                inputFile.seekg(currentSector * inputSectorSize, std::ios::beg);
+                fseeko(inputFile.get(), currentSector * inputSectorSize, SEEK_SET);
                 continue;
             }
 
             printf("\b\b\b\b%3jd%%", (currentSector * 100) / totalSectors);
-            parse(inputFile, currentSector, processedSectors);
+            parse(inputFile.get(), currentSector, processedSectors);
         }
-        inputFile.close();
         printf("\b\b\b\b100%%\n");
 
         if (entries.empty())
@@ -102,13 +104,18 @@ public:
         if (!std::filesystem::exists(outputDir))
             std::filesystem::create_directories(outputDir);
 
-        std::ifstream inputFile(inputPath, std::ios::binary);
+        std::unique_ptr<char []> stdiBuf(new char[STDIO_IOFBF_SIZE]);
+        std::unique_ptr<char []> stdoBuf(new char[STDIO_IOFBF_SIZE]);
+
+        std::unique_ptr<FILE, decltype(&fclose)> inputFile(fopen(inputPath.string().c_str(), "rb"), &fclose);
+        setvbuf(inputFile.get(), stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
+
         std::string namePrefix = inputPath.stem().u8string() + "_";
         size_t namePadWidth = std::max<size_t>(std::to_string(entries.size() - 1).length(), 2);
         for (FileInfo &entry : entries)
         {
             entry.fileName = namePrefix + std::string(namePadWidth - entry.fileName.length(), '0') + std::move(entry.fileName) + ".xa";
-            std::ofstream outputFile(outputDir / std::filesystem::u8path(entry.fileName), std::ios::binary);
+            FILE *outputFile = fopen((outputDir / std::filesystem::u8path(entry.fileName)).string().c_str(), "wb");
             if (!outputFile)
             {
                 fprintf(stderr, "Error: Cannot write \"%s\". %s\n", entry.fileName.c_str(), strerror(errno));
@@ -116,25 +123,24 @@ public:
             }
             else
                 printf("Deinterleaving %s... ", entry.fileName.c_str());
+            setvbuf(outputFile, stdoBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
 
             int curSec = entry.begSec;
             int endSec = entry.endSec - (entry.nullTermination * (entry.sectorStride + 1));
-            inputFile.seekg(static_cast<std::streamoff>(curSec) * inputSectorSize, std::ios::beg);
+            fseeko(inputFile.get(), static_cast<int64_t>(curSec) * inputSectorSize, SEEK_SET);
             do {
                 int i = 0;
                 do {
-                    if (!inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
-                    {
-                        inputFile.clear();
+                    if (fread(buffer + offset, 1, inputSectorSize, inputFile.get()) != inputSectorSize)
                         goto END;
-                    }
-                    outputFile.write(reinterpret_cast<const char *>(buffer) + outOffset, sectorSize);
+
+                    fwrite(buffer + outOffset, 1, sectorSize, outputFile);
                 } while (++i < entry.sectorChunk);
-                inputFile.seekg(entry.sectorStride * inputSectorSize, std::ios::cur);
+                fseeko(inputFile.get(), entry.sectorStride * inputSectorSize, SEEK_CUR);
             } while ((curSec += entry.sectorChunk + entry.sectorStride) < endSec);
 
         END:
-            outputFile.close();
+            fclose(outputFile);
             printf("Done\n");
         }
 
@@ -154,6 +160,7 @@ private:
     const std::filesystem::path inputPath;
     static constexpr int SOUND_GROUP_HEAD = 16;
     static constexpr int SOUND_GROUP_SIZE = 128;
+    static constexpr int STDIO_IOFBF_SIZE = 1024 * 1024; // 1MiB
 
     uint8_t buffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
     uint8_t emptyBuffer[SOUND_GROUP_SIZE - SOUND_GROUP_HEAD]{};
@@ -179,7 +186,7 @@ private:
         return buffer[SUBMODE_OFFSET] & 0x04; // 0x04 = AUDIO_MASK
     }
 
-    void parse(std::ifstream &inputFile, intmax_t &currentSector, std::vector<bool> &processedSectors)
+    void parse(FILE *inputFile, intmax_t &currentSector, std::vector<bool> &processedSectors)
     {
         FileInfo entry{};
         entry.filenum = buffer[FILENUM_OFFSET];
@@ -199,22 +206,18 @@ private:
 
             if (entry.sectorStride > 0)
             {
-                inputFile.seekg(skipSize, std::ios::cur);
-                if (!inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
-                {
-                    inputFile.clear();
+                fseeko(inputFile, skipSize, SEEK_CUR);
+                if (fread(buffer + offset, 1, inputSectorSize, inputFile) != inputSectorSize)
                     goto END;
-                }
+
                 if (processedSectors[currentSector + entry.sectorStride])
                     goto END;
             }
             else
             {
-                if (!inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
-                {
-                    inputFile.clear();
+                if (fread(buffer + offset, 1, inputSectorSize, inputFile) != inputSectorSize)
                     goto END;
-                }
+
                 // Check if the next sector has different channel or submode.
                 if (!eof && entry.sectorCount < 32 && (processedSectors[currentSector] ||
                     entry.channel != buffer[CHANNEL_OFFSET] || !isAudio()))
@@ -222,11 +225,9 @@ private:
                     // Calculate sectorStride and skipSize
                     do {
                         entry.sectorStride++;
-                        if (!inputFile.read(reinterpret_cast<char *>(buffer) + offset, inputSectorSize))
-                        {
-                            inputFile.clear();
+                        if (fread(buffer + offset, 1, inputSectorSize, inputFile) != inputSectorSize)
                             goto END;
-                        }
+
                     } while (processedSectors[currentSector + entry.sectorStride] ||
                              entry.channel != buffer[CHANNEL_OFFSET] || !isAudio());
 
@@ -261,7 +262,7 @@ private:
         if (entry.sectorStride > 0)
             currentSector = entry.begSec + 1;
 
-        inputFile.seekg(currentSector * inputSectorSize, std::ios::beg);
+        fseeko(inputFile, currentSector * inputSectorSize, SEEK_SET);
 
         // Skip silence-only files.
         if (silent)

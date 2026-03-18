@@ -4,16 +4,19 @@
 #pragma once
 
 #ifdef _MSC_VER
+#undef fseeko
+#undef strtok_r
+#undef strncasecmp
+#define fseeko _fseeki64
 #define strtok_r strtok_s
 #define strncasecmp _strnicmp
-#include <string>
 #endif
 
 #include <filesystem>
-#include <fstream>
 #include <vector>
 #include <cstring>
 #include <optional>
+#include <utility>
 
 class interleaver
 {
@@ -37,7 +40,7 @@ public:
     // sectorStride must be like the psx XA format (2/4/8/16/32).
     explicit interleaver(const std::filesystem::path &inputPath, const int sectorStride) : sectorStride(sectorStride)
     {
-        std::ifstream inputFile(inputPath);
+        std::unique_ptr<FILE, decltype(&fclose)> inputFile(fopen(inputPath.string().c_str(), "r"), &fclose);
         if (!inputFile)
         {
             fprintf(stderr, "Error: Cannot read \"%s\". %s\n", inputPath.filename().string().c_str(), strerror(errno));
@@ -46,14 +49,14 @@ public:
 
         char *field;
         char *saveptr;
-        std::string line;
+        char line[1024];
         size_t lastMinSec = 0;
         int div_check = sectorStride;
 
-        while (std::getline(inputFile, line))
+        while (fgets(line, sizeof(line), inputFile.get()))
         {
             FileInfo entry{};
-            entry.sectorChunk = atoi(strtok_r(line.data(), ",", &saveptr));
+            entry.sectorChunk = atoi(strtok_r(line, ",", &saveptr));
             if (entry.sectorChunk < 1)
                 continue;
             else if (entry.sectorChunk > sectorStride ||
@@ -81,15 +84,16 @@ public:
             {
                 if ((field = strtok_r(NULL, ",", &saveptr)))
                 {
+                    field[strcspn(field, "\r\n")] = 0;
                     entry.filePath = inputPath.parent_path() / std::filesystem::u8path(field);
-                    std::ifstream input(entry.filePath, std::ios::binary);
-                    if (!input)
+                    FILE *test = fopen(entry.filePath.string().c_str(), "rb");
+                    if (!test)
                     {
                         fprintf(stderr, "Error: Cannot read \"%s\" at line %zu. %s\n", entry.filePath.string().c_str(), entries.size() + 1, strerror(errno));
                         std::vector<FileInfo>().swap(entries);
                         return;
                     }
-                    input.close();
+                    fclose(test);
 
                     const uintmax_t fileSize = std::filesystem::file_size(entry.filePath);
                     if (fileSize == 0 ||
@@ -152,13 +156,13 @@ public:
     }
     virtual ~interleaver() = default;
 
-    // outputFile must be opened in read and write binary (w+b) mode.
+    // outputFile must be opened in read and write binary (+b) mode.
     // sectorSize must be 2336 or 2352 to change the output size.
-    void interleave(std::fstream &outputFile, int sectorSize = 0)
+    void interleave(FILE *outputFile, int sectorSize = 0)
     {
         uint8_t buffer[CD_SECTOR_SIZE]{};
         uint8_t emptyBuffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
-        std::vector<std::pair<std::ifstream, int>> inputFiles(sectorStride);
+        std::vector<std::tuple<FILE *, std::unique_ptr<char []>, int>> inputFiles(sectorStride);
         std::vector<FileInfo> workingEntries = entries;
 
         int can_read = 0;
@@ -169,7 +173,12 @@ public:
                 !entry.filePath.empty())
             {
                 if (can_read < sectorStride)
-                    inputFiles[can_read].first.open(entry.filePath, std::ios::binary);
+                {
+                    auto &[inputFile, stdiBuf, _] = inputFiles[can_read];
+                    stdiBuf.reset(new char[STDIO_IOFBF_SIZE]);
+                    inputFile = fopen(entry.filePath.string().c_str(), "rb");
+                    setvbuf(inputFile, stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
+                }
                 if (sectorSize == 0)
                     sectorSize = entry.sectorSize;
                 can_read++;
@@ -194,17 +203,17 @@ public:
             for (int i = 0; i < sectorStride/* && i < workingEntries.size()*/; ++i)
             {
                 FileInfo &entry = workingEntries[i];
-                auto &[inputFile, currentSector] = inputFiles[i];
+                auto &[inputFile, stdiBuf, currentSector] = inputFiles[i];
 
                 for (int is = 0; is < entry.sectorChunk; ++is)
                 {
-                    if (entry.sectorSize &&
-                        inputFile.read(reinterpret_cast<char *>(buffer) + (CD_SECTOR_SIZE - entry.sectorSize), entry.sectorSize))
+                    if (inputFile != nullptr &&
+                        fread(buffer + (CD_SECTOR_SIZE - entry.sectorSize), 1, entry.sectorSize, inputFile) == entry.sectorSize)
                     {
                         currentSector++;
                         buffer[FILENUM_OFFSET + 4] = buffer[FILENUM_OFFSET] = entry.filenum.value_or(buffer[FILENUM_OFFSET]);
                         buffer[CHANNEL_OFFSET + 4] = buffer[CHANNEL_OFFSET] = entry.channel.value_or(buffer[CHANNEL_OFFSET]);
-                        outputFile.write(reinterpret_cast<const char *>(buffer) + outOffset, sectorSize);
+                        fwrite(buffer + outOffset, 1, sectorSize, outputFile);
                     }
                     else
                     {
@@ -212,34 +221,38 @@ public:
                         nullCustomizer(emptyBuffer, entry);
                         memcpy(&emptyBuffer[FILENUM_OFFSET], &entry.nullSubheader, sizeof(entry.nullSubheader));
                         memcpy(&emptyBuffer[FILENUM_OFFSET + 4], &entry.nullSubheader, sizeof(entry.nullSubheader));
-                        outputFile.write(reinterpret_cast<const char *>(emptyBuffer) + outOffset, sectorSize);
+                        fwrite(emptyBuffer + outOffset, 1, sectorSize, outputFile);
                     }
                 }
 
-                if (inputFile.is_open() &&
+                if (inputFile != nullptr &&
                     currentSector >= entry.sectorCount &&
                     entry.nullTermination-- <= 0)
                 {
-                    inputFile.close();
+                    can_read--;
+                    fclose(std::exchange(inputFile, nullptr));
                     printf("Interleaving %s... Done\n", entry.filePath.filename().string().c_str());
                     if (sectorStride < workingEntries.size())
                     {
-                        entry = std::move(workingEntries[sectorStride]);
-                        inputFile.open(entry.filePath, std::ios::binary);
-                        workingEntries.erase(workingEntries.begin() + sectorStride);
                         currentSector = 0;
+                        entry = std::move(workingEntries[sectorStride]);
+                        inputFile = fopen(entry.filePath.string().c_str(), "rb");
+                        setvbuf(inputFile, stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
+                        workingEntries.erase(workingEntries.begin() + sectorStride);
                     }
-                    can_read--;
+                    else
+                        stdiBuf.reset();
                 }
             }
         }
 
-        outputFile.seekg(-2334, std::ios::end);
-        int EOFbit = outputFile.get() | 0x80;
-        outputFile.seekp(-2334, std::ios::end);
-        outputFile.put(EOFbit);
-        outputFile.seekp(3, std::ios::cur);
-        outputFile.put(EOFbit);
+        fseeko(outputFile, -2334, SEEK_END);
+        int EOFbit = fgetc(outputFile) | 0x80;
+        fseeko(outputFile, -2334, SEEK_END);
+        fputc(EOFbit, outputFile);
+        fseeko(outputFile, -2330, SEEK_END);
+        fputc(EOFbit, outputFile);
+        fseeko(outputFile, 0, SEEK_END);
     }
 
 protected:
@@ -250,6 +263,7 @@ protected:
 
 private:
     const int sectorStride;
+    static constexpr int STDIO_IOFBF_SIZE = 1024 * 1024; // 1MiB
 
     // Virtual function to fill null sectors as needed.
     virtual void nullCustomizer(uint8_t *emptyBuffer, FileInfo &entry)
