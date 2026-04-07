@@ -144,7 +144,7 @@ public:
             printf("Done\n");
         }
 
-        createManifest(outputDir, inputPath.stem().string() + ".csv");
+        createManifest(outputDir, inputPath.stem().string() + ".csv", sectorSize == XA_DATA_SIZE ? "xa" : "xacd");
     }
 
 protected:
@@ -273,7 +273,7 @@ private:
     }
 
     // Virtual function to fill the manifest as needed.
-    virtual void createManifest(const std::filesystem::path &outputDir, const std::string &fileName)
+    virtual void createManifest(const std::filesystem::path &outputDir, const std::string &fileName, const char *type)
     {
         FILE *manifest = fopen((outputDir / fileName).string().c_str(), "wb");
         if (!manifest)
@@ -285,7 +285,7 @@ private:
         fprintf(manifest, "chunk,type,file,null_termination,xa_file_number,xa_channel_number" /*",xa_null_subheader"*/ ",sector_beg-end\n");
         for (const FileInfo &entry : entries)
         {
-            fprintf(manifest, "%d,%s,%s,%d,%hhu,%hhu" /*",0x%02X%02X%02X%02X"*/ ",%d-%d\n", entry.sectorChunk, inputSectorSize == XA_DATA_SIZE ? "xa" : "xacd",
+            fprintf(manifest, "%d,%s,%s,%d,%hhu,%hhu" /*",0x%02X%02X%02X%02X"*/ ",%d-%d\n", entry.sectorChunk, type,
                     entry.fileName.c_str(), entry.nullTermination, entry.filenum, entry.channel,
                     /*entry.nullSubheader[0], entry.nullSubheader[1], entry.nullSubheader[2], entry.nullSubheader[3],*/
                     entry.begSec, entry.endSec - (entry.nullTermination * (entry.sectorStride + 1)) - 1);
