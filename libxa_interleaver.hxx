@@ -200,7 +200,7 @@ public:
 
         while (can_read > 0)
         {
-            for (int i = 0; i < sectorStride/* && i < workingEntries.size()*/; ++i)
+            for (int i = 0; i < sectorStride && i < workingEntries.size(); ++i)
             {
                 FileInfo &entry = workingEntries[i];
                 auto &[inputFile, stdiBuf, currentSector] = inputFiles[i];
