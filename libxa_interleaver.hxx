@@ -134,7 +134,7 @@ public:
                 }
 
                 if (div_check - entry.sectorChunk >= 0)
-                    entry.begSec = entries.size();
+                    entry.begSec = sectorStride - div_check;
                 else
                 {
                     size_t minSec = SIZE_MAX;
@@ -144,9 +144,9 @@ public:
                             e.endSec < minSec)
                             minSec = e.endSec;
                     }
-                    entry.begSec = lastMinSec = minSec;
+                    entry.begSec = (lastMinSec = minSec) + sectorStride - 1;
                 }
-                entry.endSec = (entry.sectorCount + entry.nullTermination) * sectorStride + entry.begSec;
+                entry.endSec = entry.begSec + entry.sectorChunk + ((entry.sectorCount / entry.sectorChunk) + entry.nullTermination - 1) * sectorStride;
             }
 
             if (div_check > 0)
