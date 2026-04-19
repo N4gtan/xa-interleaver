@@ -282,13 +282,13 @@ private:
             return;
         }
 
-        fprintf(manifest, "chunk,type,file,null_termination,xa_file_number,xa_channel_number" /*",xa_null_subheader"*/ ",sector_beg-end\n");
+        fprintf(manifest, "chunk,type,file,null_termination,xa_file_number,xa_channel_number" /*",xa_null_subheader"*/ ",sector_beg-end,stride\n");
         for (const FileInfo &entry : entries)
         {
-            fprintf(manifest, "%d,%s,%s,%d,%hhu,%hhu" /*",0x%02X%02X%02X%02X"*/ ",%d-%d\n", entry.sectorChunk, type,
+            fprintf(manifest, "%d,%s,%s,%d,%hhu,%hhu" /*",0x%02X%02X%02X%02X"*/ ",%d-%d,%d\n", entry.sectorChunk, type,
                     entry.fileName.c_str(), entry.nullTermination, entry.filenum, entry.channel,
                     /*entry.nullSubheader[0], entry.nullSubheader[1], entry.nullSubheader[2], entry.nullSubheader[3],*/
-                    entry.begSec, entry.endSec - (entry.nullTermination * (entry.sectorStride + 1)) - 1);
+                    entry.begSec, entry.endSec - (entry.nullTermination * (entry.sectorStride + 1)) - 1, entry.sectorStride+1);
         }
         fclose(manifest);
     }
