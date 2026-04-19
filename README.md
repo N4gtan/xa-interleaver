@@ -2,6 +2,8 @@
 `xa-interleaver  ` builds a mixed audio xa file, supported by psx, from a manifest file with single audio xa files.
 
 `xa-deinterleaver` dumps a mixed audio xa file into single audio xa files and generates a manifest file of them.
+
+`xa-injector     ` injects a single audio xa file into a specific sector of a given target file.
 >[!IMPORTANT]
 >What's the difference between other tools? Well, this **CAN** interleave in succession with a custom stride pattern.
 >
@@ -46,6 +48,16 @@ Examples:
 xa-interleaver path/to/input.csv 8 2336 path/to/output.xa
 xa-deinterleaver path/to/input.xa 2352 path/to/output/
 ```
+
+### xa-injector
+```
+xa-injector <target> <source> <sector> <stride>
+Example:
+xa-injector path/to/target.str path/to/source.xa 7 8
+```
+>[!CAUTION]
+>If the source file is larger than the original stream, the injector will overwrite subsequent sectors, potentially corrupting data.
+
 ## Manifest
 The manifest text file must be in the following format:
 ```
@@ -109,36 +121,27 @@ chunk,type,file,null_termination,xa_file_number,xa_channel_number,xa_null_subhea
 >1,xa,audio file.xa,0,1,1
 >```
 ></details>
->Or to reemplace the audio of an .str file, the best way is using the Movie Converter 3.4 (MC32.EXE)
 >
->On the Video+Sound section put the desired .str and .xa files leaving all default but the Frame Rate
->
->15 for NTSC(USA/JAP) and 12.5 for PAL(EUR)
->
->Then, to change filenum or channel, the following trick can be done using the interleaver with `<stride>` on `1`:
-><details>
-><summary>TrickSTR.csv</summary>
->
->```
->1,xa,mc32 output.str,0,1
->```
-></details>
+>Or to reemplace the audio of an image or .str file, simply use `xa-injector`
 
 ## Compile
 A C++ compiler (MSVC, GCC, Clang) is required.
 
 ### MSVC:
 ```
+cl /std:c++17 /O2 /EHsc /Fexa-injector xa-injector.cxx
 cl /std:c++17 /O2 /EHsc /Fexa-interleaver xa-interleaver.cxx
 cl /std:c++17 /O2 /EHsc /Fexa-deinterleaver xa-deinterleaver.cxx
 ```
 ### GCC:
 ```
+g++ -std=c++17 -O2 -o xa-injector xa-injector.cxx
 g++ -std=c++17 -O2 -o xa-interleaver xa-interleaver.cxx
 g++ -std=c++17 -O2 -o xa-deinterleaver xa-deinterleaver.cxx
 ```
 ### Clang:
 ```
+clang++ -std=c++17 -O2 -o xa-injector xa-injector.cxx
 clang++ -std=c++17 -O2 -o xa-interleaver xa-interleaver.cxx
 clang++ -std=c++17 -O2 -o xa-deinterleaver xa-deinterleaver.cxx
 ```

@@ -15,10 +15,11 @@ jobs:
         $vsPath = vswhere -latest -property installationPath
         Import-Module "$vsPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
         Enter-VsDevShell -VsInstallPath $vsPath -Arch amd64 -SkipAutomaticLocation
-        @('xa-interleaver.cxx','xa-deinterleaver.cxx') | ForEach-Object { (Get-Content $_ -Raw) -replace 'VERSION', "${{ github.ref_name }}" | Set-Content $_ -NoNewline }
+        @('xa-interleaver.cxx','xa-deinterleaver.cxx','xa-injector.cxx') | ForEach-Object { (Get-Content $_ -Raw) -replace 'VERSION', "${{ github.ref_name }}" | Set-Content $_ -NoNewline }
+        cl /std:c++17 /O2 /EHsc /Fexa-injector xa-injector.cxx
         cl /std:c++17 /O2 /EHsc /Fexa-interleaver xa-interleaver.cxx
         cl /std:c++17 /O2 /EHsc /Fexa-deinterleaver xa-deinterleaver.cxx
-        Compress-Archive -Path example.csv,xa-interleaver.exe,xa-deinterleaver.exe -DestinationPath xa-interleaver-${{ github.ref_name }}-windows.zip
+        Compress-Archive -Path example.csv,xa-interleaver.exe,xa-deinterleaver.exe,xa-injector.exe -DestinationPath xa-interleaver-${{ github.ref_name }}-windows.zip
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@main
@@ -37,10 +38,11 @@ jobs:
 
     - name: Build and package xa-interleaver
       run: |
-        for file in xa-interleaver.cxx xa-deinterleaver.cxx; do perl -pi -e "s/VERSION/${{ github.ref_name }}/g" "$file"; done
-        clang++ -std=c++17 -O2 -o xa-interleaver xa-interleaver.cxx
-        clang++ -std=c++17 -O2 -o xa-deinterleaver xa-deinterleaver.cxx
-        zip xa-interleaver-${{ github.ref_name }}-linux.zip example.csv xa-interleaver xa-deinterleaver
+        for file in xa-interleaver.cxx xa-deinterleaver.cxx xa-injector.cxx; do perl -pi -e "s/VERSION/${{ github.ref_name }}/g" "$file"; done
+        g++ -std=c++17 -O2 -o xa-injector xa-injector.cxx
+        g++ -std=c++17 -O2 -o xa-interleaver xa-interleaver.cxx
+        g++ -std=c++17 -O2 -o xa-deinterleaver xa-deinterleaver.cxx
+        zip xa-interleaver-${{ github.ref_name }}-linux.zip example.csv xa-interleaver xa-deinterleaver xa-injector
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@main
@@ -59,10 +61,11 @@ jobs:
 
     - name: Build and package xa-interleaver
       run: |
-        for file in xa-interleaver.cxx xa-deinterleaver.cxx; do perl -pi -e "s/VERSION/${{ github.ref_name }}/g" "$file"; done
+        for file in xa-interleaver.cxx xa-deinterleaver.cxx xa-injector.cxx; do perl -pi -e "s/VERSION/${{ github.ref_name }}/g" "$file"; done
+        clang++ -arch x86_64 -arch arm64 -mmacos-version-min=10.15 -std=c++17 -O2 -o xa-injector xa-injector.cxx
         clang++ -arch x86_64 -arch arm64 -mmacos-version-min=10.15 -std=c++17 -O2 -o xa-interleaver xa-interleaver.cxx
         clang++ -arch x86_64 -arch arm64 -mmacos-version-min=10.15 -std=c++17 -O2 -o xa-deinterleaver xa-deinterleaver.cxx
-        zip xa-interleaver-${{ github.ref_name }}-macos.zip example.csv xa-interleaver xa-deinterleaver
+        zip xa-interleaver-${{ github.ref_name }}-macos.zip example.csv xa-interleaver xa-deinterleaver xa-injector
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@main
