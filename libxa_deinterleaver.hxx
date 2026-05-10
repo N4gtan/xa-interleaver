@@ -133,6 +133,8 @@ public:
                 do {
                     if (fread(buffer + offset, 1, inputSectorSize, inputFile.get()) != inputSectorSize)
                         goto END;
+                    if (buffer[SUBMODE_OFFSET] & 0x80)
+                        goto END;
 
                     fwrite(buffer + outOffset, 1, sectorSize, outputFile);
                 } while (++i < entry.sectorChunk);
@@ -172,6 +174,9 @@ private:
 
     bool isNull(const int bytes = SOUND_GROUP_HEAD) const
     {
+        if (buffer[SUBMODE_OFFSET] == 0xFF)
+          return true;
+        
         int groups = ((buffer[SUBMODE_OFFSET] & 0x20) != 0 ? 18 : 16) * SOUND_GROUP_SIZE; // 0x20 = FORM2_MASK
         for (int i = bytes != SOUND_GROUP_HEAD ? 0x28 : 0x18; i < groups; i += SOUND_GROUP_SIZE) // 0x28/0x18 = DATA_OFFSET
         {
