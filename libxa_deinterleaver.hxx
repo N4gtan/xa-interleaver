@@ -133,8 +133,6 @@ public:
                 do {
                     if (fread(buffer + offset, 1, inputSectorSize, inputFile.get()) != inputSectorSize)
                         goto END;
-                    if (buffer[SUBMODE_OFFSET] & 0x80)
-                        goto END;
 
                     fwrite(buffer + outOffset, 1, sectorSize, outputFile);
                 } while (++i < entry.sectorChunk);
