@@ -17,7 +17,7 @@ public:
     struct FileInfo
     {
         std::string fileName;
-        int sectorChunk;
+        int sectorChunk = 1;
         int sectorCount;
         int sectorStride;
         int nullTermination;
