@@ -173,7 +173,7 @@ private:
     bool isNull(const int bytes = SOUND_GROUP_HEAD) const
     {
         if (buffer[SUBMODE_OFFSET] == 0xFF)
-          return true;
+            return true;
         
         int groups = ((buffer[SUBMODE_OFFSET] & 0x20) != 0 ? 18 : 16) * SOUND_GROUP_SIZE; // 0x20 = FORM2_MASK
         for (int i = bytes != SOUND_GROUP_HEAD ? 0x28 : 0x18; i < groups; i += SOUND_GROUP_SIZE) // 0x28/0x18 = DATA_OFFSET
