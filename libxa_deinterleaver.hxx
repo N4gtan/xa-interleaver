@@ -87,6 +87,13 @@ public:
 
         if (entries.empty())
             printf("No valid entries found.\n");
+        else
+        {
+            std::string namePrefix = inputPath.stem().u8string() + "_";
+            size_t namePadWidth = std::max<size_t>(std::to_string(entries.size() - 1).length(), 2);
+            for (FileInfo &entry : entries)
+                entry.fileName = namePrefix + std::string(namePadWidth - entry.fileName.length(), '0') + std::move(entry.fileName) + ".xa";
+        }
     }
     virtual ~deinterleaver() = default;
 
@@ -110,11 +117,8 @@ public:
         std::unique_ptr<FILE, decltype(&fclose)> inputFile(fopen(inputPath.string().c_str(), "rb"), &fclose);
         setvbuf(inputFile.get(), stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
 
-        std::string namePrefix = inputPath.stem().u8string() + "_";
-        size_t namePadWidth = std::max<size_t>(std::to_string(entries.size() - 1).length(), 2);
-        for (FileInfo &entry : entries)
+        for (const FileInfo &entry : entries)
         {
-            entry.fileName = namePrefix + std::string(namePadWidth - entry.fileName.length(), '0') + std::move(entry.fileName) + ".xa";
             FILE *outputFile = fopen((outputDir / std::filesystem::u8path(entry.fileName)).string().c_str(), "wb");
             if (!outputFile)
             {
