@@ -130,7 +130,6 @@ public:
             setvbuf(outputFile, stdoBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
 
             int curSec = entry.begSec;
-            int endSec = entry.endSec - (entry.nullTermination * (entry.sectorStride + 1));
             fseeko(inputFile.get(), static_cast<int64_t>(curSec) * inputSectorSize, SEEK_SET);
             do {
                 int i = 0;
@@ -139,9 +138,9 @@ public:
                         goto END;
 
                     fwrite(buffer + outOffset, 1, sectorSize, outputFile);
-                } while (++i < entry.sectorChunk);
+                } while (++curSec <= entry.endSec && ++i < entry.sectorChunk);
                 fseeko(inputFile.get(), entry.sectorStride * inputSectorSize, SEEK_CUR);
-            } while ((curSec += entry.sectorChunk + entry.sectorStride) < endSec);
+            } while ((curSec += entry.sectorStride) <= entry.endSec);
 
         END:
             fclose(outputFile);
@@ -201,11 +200,12 @@ private:
         entry.begSec  = currentSector;
 
         int skipSize;
+        int chunksRead = 0;
         bool eof = buffer[SUBMODE_OFFSET] & 0x80; // 0x80 = EOF_MASK
         bool silent = isSilent();
         do {
             entry.sectorCount++;
-            currentSector += entry.sectorStride;
+            //entry.endSec = currentSector;
             processedSectors[currentSector++] = true;
             //if (currentSector >= 42185)                                                                              //
                 //for (; currentSector > 0 && !processedSectors[--currentSector];);                                    // Debug breakpoint
@@ -213,11 +213,17 @@ private:
 
             if (entry.sectorStride > 0)
             {
-                fseeko(inputFile, skipSize, SEEK_CUR);
-                if (fread(buffer + offset, 1, inputSectorSize, inputFile) != inputSectorSize)
-                    goto END;
+                // If we finished reading a full chunk, apply the stride gap
+                if (++chunksRead == entry.sectorChunk)
+                {
+                    chunksRead = 0;
+                    currentSector += entry.sectorStride;
+                    if (currentSector >= processedSectors.size() || processedSectors[currentSector])
+                        goto END;
 
-                if (processedSectors[currentSector + entry.sectorStride])
+                    fseeko(inputFile, skipSize, SEEK_CUR);
+                }
+                if (fread(buffer + offset, 1, inputSectorSize, inputFile) != inputSectorSize)
                     goto END;
             }
             else
@@ -231,11 +237,12 @@ private:
                 {
                     // Calculate sectorStride and skipSize
                     do {
+                        currentSector++;
                         entry.sectorStride++;
                         if (fread(buffer + offset, 1, inputSectorSize, inputFile) != inputSectorSize)
                             goto END;
 
-                    } while (processedSectors[currentSector + entry.sectorStride] ||
+                    } while (processedSectors[currentSector] ||
                              entry.channel != buffer[CHANNEL_OFFSET] || !isAudio());
 
                     entry.sectorChunk = entry.sectorCount;
@@ -264,7 +271,8 @@ private:
         } while (true);
 
     END:
-        entry.endSec = currentSector;
+        const int nullSectors = entry.nullTermination / entry.sectorChunk * entry.sectorStride + entry.nullTermination;
+        entry.endSec = currentSector - entry.sectorStride - nullSectors - 1;
 
         if (entry.sectorStride > 0)
             currentSector = entry.begSec + 1;
@@ -296,7 +304,7 @@ private:
             fprintf(manifest, "%d,%s,%s,%d,%hhu,%hhu" /*",0x%02X%02X%02X%02X"*/ ",%d-%d,%d\n", entry.sectorChunk, type,
                     entry.fileName.c_str(), entry.nullTermination, entry.filenum, entry.channel,
                     /*entry.nullSubheader[0], entry.nullSubheader[1], entry.nullSubheader[2], entry.nullSubheader[3],*/
-                    entry.begSec, entry.endSec - (entry.nullTermination * (entry.sectorStride + 1)) - 1, entry.sectorStride+1);
+                    entry.begSec, entry.endSec, entry.sectorChunk + entry.sectorStride);
         }
         fclose(manifest);
     }
