@@ -81,7 +81,7 @@ public:
             }
 
             printf("\b\b\b\b%3jd%%", (currentSector * 100) / totalSectors);
-            parse(inputFile.get(), currentSector, processedSectors);
+            currentSector = parse(inputFile.get(), currentSector, processedSectors);
         }
         printf("\b\b\b\b100%%\n");
 
@@ -189,7 +189,7 @@ private:
         return buffer[SUBMODE_OFFSET] & 0x04; // 0x04 = AUDIO_MASK
     }
 
-    void parse(FILE *inputFile, intmax_t &currentSector, std::vector<bool> &processedSectors)
+    intmax_t parse(FILE *inputFile, intmax_t currentSector, std::vector<bool> &processedSectors)
     {
         FileInfo entry{};
         entry.filenum = buffer[FILENUM_OFFSET];
@@ -269,10 +269,11 @@ private:
 
         // Skip silence-only files.
         if (silent)
-            return;
+            return currentSector;
 
         entry.fileName = std::to_string(entries.size());
         entries.push_back(std::move(entry));
+        return currentSector;
     }
 
     // Virtual function to fill the manifest as needed.
