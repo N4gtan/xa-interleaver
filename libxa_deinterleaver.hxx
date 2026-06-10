@@ -38,7 +38,7 @@ public:
             fprintf(stderr, "Error: Cannot read \"%s\". %s\n", inputPath.filename().string().c_str(), strerror(errno));
             return;
         }
-        std::unique_ptr<char []> stdiBuf(new char[STDIO_IOFBF_SIZE]);
+        std::unique_ptr<char[]> stdiBuf(new char[STDIO_IOFBF_SIZE]);
         setvbuf(inputFile.get(), stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
 
         if (fread(buffer + FILENUM_OFFSET, 1, XA_DATA_SIZE, inputFile.get()) != XA_DATA_SIZE)
@@ -61,7 +61,7 @@ public:
         const intmax_t totalSectors = fileSize / inputSectorSize;
 
         intmax_t currentSector = 0;
-        std::vector<bool> processedSectors(totalSectors, false);
+        std::vector<bool> processedSectors(totalSectors);
         printf("Analyzing %s...   0%%", inputPath.filename().string().c_str());
         while (fread(buffer + offset, 1, inputSectorSize, inputFile.get()) == inputSectorSize)
         {
@@ -111,8 +111,8 @@ public:
         if (!std::filesystem::exists(outputDir))
             std::filesystem::create_directories(outputDir);
 
-        std::unique_ptr<char []> stdiBuf(new char[STDIO_IOFBF_SIZE]);
-        std::unique_ptr<char []> stdoBuf(new char[STDIO_IOFBF_SIZE]);
+        std::unique_ptr<char[]> stdiBuf(new char[STDIO_IOFBF_SIZE]);
+        std::unique_ptr<char[]> stdoBuf(new char[STDIO_IOFBF_SIZE]);
 
         std::unique_ptr<FILE, decltype(&fclose)> inputFile(fopen(inputPath.string().c_str(), "rb"), &fclose);
         setvbuf(inputFile.get(), stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
@@ -231,10 +231,13 @@ private:
                 if (fread(buffer + offset, 1, inputSectorSize, inputFile) != inputSectorSize)
                     goto END;
 
-                // Check if the next sector has different channel or submode.
-                if (!eof && entry.sectorCount < 32 && (processedSectors[currentSector] ||
-                    entry.channel != buffer[CHANNEL_OFFSET] || !isAudio()))
+                // Checks if the current sector has already been processed or has different channel/submode.
+                auto isStrideSector = [&]() -> bool { return processedSectors[currentSector] || entry.channel != buffer[CHANNEL_OFFSET] || !isAudio(); };
+
+                if (entry.sectorCount < 32 && !eof && isStrideSector())
                 {
+                    entry.sectorChunk = entry.sectorCount;
+
                     // Calculate sectorStride and skipSize
                     do {
                         currentSector++;
@@ -242,31 +245,35 @@ private:
                         if (fread(buffer + offset, 1, inputSectorSize, inputFile) != inputSectorSize)
                             goto END;
 
-                    } while (processedSectors[currentSector] ||
-                             entry.channel != buffer[CHANNEL_OFFSET] || !isAudio());
-
-                    entry.sectorChunk = entry.sectorCount;
+                    } while (isStrideSector());
                     skipSize = entry.sectorStride * inputSectorSize;
                 }
             }
 
             if (entry.filenum != buffer[FILENUM_OFFSET])
                 goto END;
-            else if ((entry.nullTermination > 0 && entry.nullSubheader[1] == buffer[CHANNEL_OFFSET] &&
-                     (entry.nullSubheader[2] | 0x80) == (buffer[SUBMODE_OFFSET] | 0x80) && isNull()) ||
-                    (entry.nullTermination == 0 && isNull()))
+            else if (entry.nullTermination > 0)
             {
-                if (entry.nullTermination++ == 0)
-                    memcpy(&entry.nullSubheader, &buffer[FILENUM_OFFSET], sizeof(entry.nullSubheader));
+                if (entry.nullSubheader[1] == buffer[CHANNEL_OFFSET] && (entry.nullSubheader[2] | 0x80) == (buffer[SUBMODE_OFFSET] | 0x80) && isNull())
+                    entry.nullTermination++;
+                else
+                    goto END;
             }
-            else if (entry.nullTermination || eof ||
-                     entry.channel != buffer[CHANNEL_OFFSET])
-                goto END;
             else
             {
-                eof = buffer[SUBMODE_OFFSET] & 0x80; // 0x80 = EOF_MASK
-                if (silent)
-                    silent = isSilent();
+                if (isNull())
+                {
+                    entry.nullTermination++;
+                    memcpy(&entry.nullSubheader, &buffer[FILENUM_OFFSET], sizeof(entry.nullSubheader));
+                }
+                else if (eof || entry.channel != buffer[CHANNEL_OFFSET])
+                    goto END;
+                else
+                {
+                    eof = buffer[SUBMODE_OFFSET] & 0x80; // 0x80 = EOF_MASK
+                    if (silent)
+                        silent = isSilent();
+                }
             }
         } while (true);
 
