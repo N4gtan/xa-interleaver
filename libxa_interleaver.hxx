@@ -51,7 +51,7 @@ public:
         char *saveptr;
         char line[1024];
         size_t lastMinSec = 0;
-        int div_check = sectorStride;
+        int fillTarget = sectorStride;
 
         while (fgets(line, sizeof(line), inputFile.get()))
         {
@@ -59,10 +59,11 @@ public:
             entry.sectorChunk = atoi(strtok_r(line, ",", &saveptr));
             if (entry.sectorChunk < 1)
                 continue;
-            else if (entry.sectorChunk > sectorStride ||
-                     div_check < 0)
+
+            if (entry.sectorChunk > sectorStride ||
+                (fillTarget > 0 ? fillTarget -= entry.sectorChunk : fillTarget) < 0)
             {
-                fprintf(stderr, "Error: Consecutive sectors exceed %d\n", sectorStride);
+                fprintf(stderr, "Error: Consecutive chunks exceed %d\n", sectorStride);
                 std::vector<FileInfo>().swap(entries);
                 return;
             }
@@ -133,8 +134,8 @@ public:
                     }
                 }
 
-                if (div_check - entry.sectorChunk >= 0)
-                    entry.begSec = sectorStride - div_check;
+                if (fillTarget > 0)
+                    entry.begSec = sectorStride - fillTarget;
                 else
                 {
                     size_t minSec = SIZE_MAX;
@@ -149,8 +150,6 @@ public:
                 entry.endSec = entry.begSec + entry.sectorChunk + ((entry.sectorCount / entry.sectorChunk) + entry.nullTermination - 1) * sectorStride;
             }
 
-            if (div_check > 0)
-                div_check -= entry.sectorChunk;
             entries.push_back(std::move(entry));
         }
     }
