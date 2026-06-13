@@ -50,8 +50,8 @@ public:
         char *field;
         char *saveptr;
         char line[1024];
-        size_t lastMinSec = 0;
         int fillTarget = sectorStride;
+        std::vector<int> slots(sectorStride);
 
         while (fgets(line, sizeof(line), inputFile.get()))
         {
@@ -70,7 +70,7 @@ public:
 
             if (!(field = strtok_r(NULL, ",", &saveptr)) ||
                 strncasecmp(field, "null", 4) == 0)
-                entry.sectorSize = 0;
+                entry.sectorSize = entry.endSec = -1;
             else if (strncasecmp(field, "xacd", 4) == 0)
                 entry.sectorSize = CD_SECTOR_SIZE;
             else if (strncasecmp(field, "xa", 2) == 0)
@@ -81,6 +81,22 @@ public:
                 continue;
             }
 
+            int idle = 0;
+            entry.begSec = INT32_MAX;
+            for (int s = 0; s <= sectorStride - entry.sectorChunk; ++s)
+            {
+                int maxBase = 0;
+                for (int i = 0; i < entry.sectorChunk; ++i)
+                    maxBase = std::max(maxBase, slots[s + i] - (s + i));
+
+                if (maxBase + s < entry.begSec)
+                {
+                    idle = s;
+                    entry.begSec = maxBase + s;
+                }
+            }
+
+            int nextBase = INT32_MAX / 2;
             if (entry.sectorSize > 0)
             {
                 if ((field = strtok_r(NULL, ",", &saveptr)))
@@ -134,21 +150,13 @@ public:
                     }
                 }
 
-                if (fillTarget > 0)
-                    entry.begSec = sectorStride - fillTarget;
-                else
-                {
-                    size_t minSec = SIZE_MAX;
-                    for (const auto &e : entries)
-                    {
-                        if (e.endSec > lastMinSec &&
-                            e.endSec < minSec)
-                            minSec = e.endSec;
-                    }
-                    entry.begSec = (lastMinSec = minSec) + sectorStride - 1;
-                }
-                entry.endSec = entry.begSec + entry.sectorChunk + ((entry.sectorCount / entry.sectorChunk) + entry.nullTermination - 1) * sectorStride;
+                const int sectorCount = entry.sectorCount - 1;
+                entry.endSec = entry.begSec + sectorCount + sectorCount / entry.sectorChunk * (sectorStride - entry.sectorChunk);
+                nextBase = (entry.endSec / sectorStride + 1 + entry.nullTermination) * sectorStride;
             }
+
+            for (int i = 0; i < entry.sectorChunk; ++i)
+                slots[idle + i] = nextBase + idle + i;
 
             entries.push_back(std::move(entry));
         }
