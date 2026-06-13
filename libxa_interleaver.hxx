@@ -53,7 +53,7 @@ public:
         int fillTarget = sectorStride;
         std::vector<int> slots(sectorStride);
 
-        while (fgets(line, sizeof(line), inputFile.get()))
+        for (int lineNum = 1; fgets(line, sizeof(line), inputFile.get()); ++lineNum)
         {
             FileInfo entry{};
             entry.sectorChunk = atoi(strtok_r(line, ",", &saveptr));
@@ -77,7 +77,7 @@ public:
                 entry.sectorSize = XA_DATA_SIZE;
             else
             {
-                fprintf(stderr, "Warning: Unknown type \"%s\" at line %zu\n", field, entries.size() + 1);
+                printf("Warning: Skipped line %d. Invalid type \"%s\"\n", lineNum, field);
                 continue;
             }
 
@@ -106,7 +106,7 @@ public:
                     FILE *test = fopen(entry.filePath.string().c_str(), "rb");
                     if (!test)
                     {
-                        fprintf(stderr, "Error: Cannot read \"%s\" at line %zu. %s\n", entry.filePath.string().c_str(), entries.size() + 1, strerror(errno));
+                        fprintf(stderr, "Error: Cannot read \"%s\" at line %d. %s\n", entry.filePath.string().c_str(), lineNum, strerror(errno));
                         std::vector<FileInfo>().swap(entries);
                         return;
                     }
@@ -116,7 +116,7 @@ public:
                     if (fileSize == 0 ||
                         fileSize % entry.sectorSize != 0)
                     {
-                        fprintf(stderr, "Error: Invalid type for \"%s\" at line %zu\n", field, entries.size() + 1);
+                        fprintf(stderr, "Error: Invalid type for \"%s\" at line %d\n", field, lineNum);
                         std::vector<FileInfo>().swap(entries);
                         return;
                     }
@@ -124,7 +124,7 @@ public:
                 }
                 else
                 {
-                    fprintf(stderr, "Error: Empty file name at line %zu\n", entries.size() + 1);
+                    fprintf(stderr, "Error: Empty file name at line %d\n", lineNum);
                     std::vector<FileInfo>().swap(entries);
                     return;
                 }
