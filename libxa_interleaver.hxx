@@ -167,57 +167,59 @@ public:
     // sectorSize must be 2336 or 2352 to change the output size.
     void interleave(FILE *outputFile, int sectorSize = 0)
     {
-        uint8_t buffer[CD_SECTOR_SIZE]{};
+        uint8_t buffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
         uint8_t emptyBuffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x02};
-        std::vector<std::tuple<FILE *, std::unique_ptr<char []>, int>> inputFiles(sectorStride);
-        std::vector<FileInfo> workingEntries = entries;
 
-        int can_read = 0;
-        int sectorsToFill = sectorStride;
-        for (const auto &entry : workingEntries)
+        struct SlotInfo
         {
-            if (entry.sectorSize > 0 &&
-                !entry.filePath.empty())
+            FileInfo entry;
+            FILE *inputFile;
+            int sectorCount;
+            std::unique_ptr<char[]> stdiBuf = std::unique_ptr<char[]>(new char[STDIO_IOFBF_SIZE]);
+        };
+        std::vector<SlotInfo> slots(sectorStride);
+
+        int activeFiles = 0;
+        auto loadFile = [&activeFiles, &slots](const int index, const FileInfo &entry) -> void
+        {
+            activeFiles++;
+            auto &slot = slots[index];
+            slot.entry = entry;
+            slot.inputFile = fopen(slot.entry.filePath.string().c_str(), "rb");
+            setvbuf(slot.inputFile, slot.stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
+        };
+
+        size_t nextEntryIdx = 0;
+        for (int i = 0; i < sectorStride; ++i)
+        {
+            if (nextEntryIdx < entries.size())
             {
-                if (can_read < sectorStride)
+                const FileInfo &entry = entries[nextEntryIdx++];
+                if (entry.sectorSize > 0)
                 {
-                    auto &[inputFile, stdiBuf, _] = inputFiles[can_read];
-                    stdiBuf.reset(new char[STDIO_IOFBF_SIZE]);
-                    inputFile = fopen(entry.filePath.string().c_str(), "rb");
-                    setvbuf(inputFile, stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
+                    loadFile(i, entry);
+                    if (sectorSize == 0)
+                        sectorSize = entry.sectorSize;
                 }
-                if (sectorSize == 0)
-                    sectorSize = entry.sectorSize;
-                can_read++;
+                i += entry.sectorChunk - 1;
             }
-            sectorsToFill -= entry.sectorChunk;
+            else
+                slots[i].entry.filenum = entries.back().filenum;
         }
+
         const int outOffset = CD_SECTOR_SIZE - sectorSize;
-
-        // Fill with null sectors to achieve the desired stride
-        if (sectorsToFill > 0 &&
-            sectorsToFill < sectorStride)
+        while (activeFiles > 0)
         {
-            for (int i = workingEntries.size() - 1; sectorsToFill > 0; ++i, --sectorsToFill)
+            for (int i = 0; i < sectorStride;)
             {
-                FileInfo &e = workingEntries.emplace_back();
-                e.filenum   = workingEntries[i].filenum;
-            }
-        }
+                auto &[entry, inputFile, sectorCount, _] = slots[i];
 
-        while (can_read > 0)
-        {
-            for (int i = 0; i < sectorStride && i < workingEntries.size(); ++i)
-            {
-                FileInfo &entry = workingEntries[i];
-                auto &[inputFile, stdiBuf, currentSector] = inputFiles[i];
-
-                for (int is = 0; is < entry.sectorChunk; ++is)
+                for (int j = 0; j < entry.sectorChunk; ++j, ++i)
                 {
                     if (inputFile != nullptr &&
                         fread(buffer + (CD_SECTOR_SIZE - entry.sectorSize), 1, entry.sectorSize, inputFile) == entry.sectorSize)
                     {
-                        currentSector++;
+                        sectorCount++;
                         buffer[FILENUM_OFFSET + 4] = buffer[FILENUM_OFFSET] = entry.filenum.value_or(buffer[FILENUM_OFFSET]);
                         buffer[CHANNEL_OFFSET + 4] = buffer[CHANNEL_OFFSET] = entry.channel.value_or(buffer[CHANNEL_OFFSET]);
                         fwrite(buffer + outOffset, 1, sectorSize, outputFile);
@@ -233,24 +235,46 @@ public:
                 }
 
                 if (inputFile != nullptr &&
-                    currentSector >= entry.sectorCount &&
+                    sectorCount >= entry.sectorCount &&
                     entry.nullTermination-- <= 0)
                 {
-                    can_read--;
+                    activeFiles--;
+                    sectorCount = 0;
                     fclose(std::exchange(inputFile, nullptr));
                     printf("Interleaving %s... Done\n", entry.filePath.filename().string().c_str());
-                    if (sectorStride < workingEntries.size())
+
+                    for (int idle = 0, index = 0, target; index < sectorStride && nextEntryIdx < entries.size(); ++index)
                     {
-                        currentSector = 0;
-                        entry = std::move(workingEntries[sectorStride]);
-                        inputFile = fopen(entry.filePath.string().c_str(), "rb");
-                        setvbuf(inputFile, stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
-                        workingEntries.erase(workingEntries.begin() + sectorStride);
+                        auto &slot = slots[index];
+                        if (slot.inputFile == nullptr &&
+                            slot.entry.sectorSize >= 0)
+                        {
+                            if (idle++ == 0)
+                                target = index;
+                        }
+                        else
+                            idle = 0;
+
+                        const FileInfo &nextEntry = entries[nextEntryIdx];
+                        if (idle == nextEntry.sectorChunk)
+                        {
+                            idle = 0;
+                            index += nextEntry.sectorChunk - 1;
+                            nextEntryIdx++;
+                            if (nextEntry.sectorSize > 0)
+                                loadFile(target, nextEntry);
+                            else
+                                slot.entry = nextEntry;
+                        }
                     }
-                    else
-                        stdiBuf.reset();
                 }
             }
+        }
+
+        if (nextEntryIdx < entries.size())
+        {
+            printf("Warning: The last %zu entries were not interleaved due to lack of free chunks.\n"
+                   "         This can happen when mixing large chunks with null entries.\n", entries.size() - nextEntryIdx);
         }
 
         fseeko(outputFile, -2334, SEEK_END);
