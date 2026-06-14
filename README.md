@@ -19,10 +19,10 @@
 
 ## Usage
 ```
-xa-interleaver <input> <stride> <2336/2352> <output>
+xa-interleaver <input> <stride> <size> <output>
 ```
 ```
-xa-deinterleaver <input> <2336/2352> <output>
+xa-deinterleaver <input> <size> <output>
 ```
 
 ### Commands
@@ -35,13 +35,13 @@ xa-deinterleaver <input> <2336/2352> <output>
 Required:
 ```
 <input>     For interleave can be a .csv, .txt, or any text file properly formated.
-            For deinterleave can be any mixed audio file. A CD image file (bin/iso) can work, but is not recommended.
+            For deinterleave can be any mixed audio file. A .bin CD image file works, but is not recommended.
 ```
 Optional:
 ```
 <stride>    (Only for interleave) Stride of sectors to interleave, 2/4/8/16/32. Defaults to 8
-<2336/2352> Output file sector size (2336 or 2352). Defaults to input file (or the first file in the manifest) sector size
-<output>    Optional output file(s) path. Defaults to input file path
+<size>      Optional output file sector size (2336 or 2352). Defaults to input file (or the first file in the manifest) sector size
+<output>    Optional output dir/file path. Defaults to input dir/file path
 ```
 Examples:
 ```

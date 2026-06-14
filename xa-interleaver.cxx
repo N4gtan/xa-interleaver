@@ -3,14 +3,14 @@
 
 int main(int argc, char *argv[])
 {
-    if (argc < 2)
+    if (argc < 2 || strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)
     {
-        printf("xa-interleaver " VER " by N4gtan\n\n");
-        printf("    Usage: xa-interleaver <input> <stride> <2336/2352> <output>\n\n");
-        printf("    Input: Manifest .csv file (or any text file with the appropriate format)\n");
-        printf("   Stride: Stride of sectors to interleave. Defaults to 8\n");
-        printf("2336/2352: Output file sector size (2336 or 2352). Defaults to first file sector size\n");
-        printf("   Output: Optional output file path. Defaults to input file path\n");
+        printf("xa-interleaver " VER " by N4gtan\n\n"
+               " Usage: xa-interleaver <input> <stride> <size> <output>\n\n"
+               " Input: Manifest .csv file (or any text file with the appropriate format)\n"
+               "Stride: Optional stride of sectors to interleave (2/4/8/16/32). Defaults to 8\n"
+               "  Size: Optional output file sector size (2336 or 2352). Defaults to first file sector size\n"
+               "Output: Optional output file path. Defaults to input file path\n");
         return EXIT_SUCCESS;
     }
 
@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    const std::filesystem::path outputPath = argc >= 4 ? argv[3] : inputFile.stem() += "_NEW.XA";
+    const std::filesystem::path outputPath = argc >= 5 ? argv[4] : inputFile.parent_path() / inputFile.stem() += "_NEW.XA";
     FILE *outputFile = fopen(outputPath.string().c_str(), "w+b");
     if (!outputFile)
     {
