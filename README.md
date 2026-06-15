@@ -1,9 +1,9 @@
 # xa-interleaver
-`xa-interleaver  ` builds a mixed audio xa file, supported by psx, from a manifest file with single audio xa files.
+`⠀xa-interleaver ` builds a mixed audio xa file, supported by psx, from a manifest file with single audio xa files.
 
 `xa-deinterleaver` dumps a mixed audio xa file into single audio xa files and generates a manifest file of them.
 
-`xa-injector     ` injects a single audio xa file into a specific sector of a given target file.
+`⠀⠀xa-replacer   ` replaces a mixed audio xa file stream with a given single audio xa file.
 >[!IMPORTANT]
 >What's the difference between other tools? Well, this **CAN** interleave in succession with a custom stride pattern.
 >
@@ -49,14 +49,14 @@ xa-interleaver path/to/input.csv 8 2336 path/to/output.xa
 xa-deinterleaver path/to/input.xa 2352 path/to/output/
 ```
 
-### xa-injector
+### xa-replacer
 ```
-xa-injector <target> <source> <sector> <stride>
+xa-replacer <target> <source> <sector>
 Example:
-xa-injector path/to/target.str path/to/source.xa 7 8
+xa-replacer path/to/target.str path/to/source.xa 7
 ```
 >[!CAUTION]
->If the source file is larger than the original stream, the injector will overwrite subsequent sectors, potentially corrupting data.
+>Files containing non-media data might cause the tool to misidentify null data sectors as null audio sectors.
 
 ## Manifest
 The manifest text file must be in the following format:
@@ -74,6 +74,7 @@ chunk,type,file,null_termination,xa_file_number,xa_channel_number,xa_null_subhea
 |`xa_null_subheader`|`0xFFFFFFFF`      |***OPTIONAL*** subheader value for null-termination sectors. Defaults to 0x`xa_file_number`000000.|
 
 >[!NOTE]
+>The deinterleaver's `sector_beg-end` and `stride` fields are purely informative and do not affect interleaving.
 ><details>
 ><summary>Example.csv manifest for Megaman X6 BGM.XA:</summary>
 >
@@ -122,26 +123,26 @@ chunk,type,file,null_termination,xa_file_number,xa_channel_number,xa_null_subhea
 >```
 ></details>
 >
->Or to reemplace the audio of an image or .str file, simply use `xa-injector`
+>Or to replace the audio of an image or .str file, simply use `xa-replacer`
 
 ## Compile
 A C++ compiler (MSVC, GCC, Clang) is required.
 
 ### MSVC:
 ```
-cl /std:c++17 /O2 /EHsc /Fexa-injector xa-injector.cxx
+cl /std:c++17 /O2 /EHsc /Fexa-replacer xa-replacer.cxx
 cl /std:c++17 /O2 /EHsc /Fexa-interleaver xa-interleaver.cxx
 cl /std:c++17 /O2 /EHsc /Fexa-deinterleaver xa-deinterleaver.cxx
 ```
 ### GCC:
 ```
-g++ -std=c++17 -O2 -o xa-injector xa-injector.cxx
+g++ -std=c++17 -O2 -o xa-replacer xa-replacer.cxx
 g++ -std=c++17 -O2 -o xa-interleaver xa-interleaver.cxx
 g++ -std=c++17 -O2 -o xa-deinterleaver xa-deinterleaver.cxx
 ```
 ### Clang:
 ```
-clang++ -std=c++17 -O2 -o xa-injector xa-injector.cxx
+clang++ -std=c++17 -O2 -o xa-replacer xa-replacer.cxx
 clang++ -std=c++17 -O2 -o xa-interleaver xa-interleaver.cxx
 clang++ -std=c++17 -O2 -o xa-deinterleaver xa-deinterleaver.cxx
 ```
