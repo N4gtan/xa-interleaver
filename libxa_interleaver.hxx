@@ -151,8 +151,11 @@ public:
                 }
 
                 const int sectorCount = entry.sectorCount - 1;
-                entry.endSec = entry.begSec + sectorCount + sectorCount / entry.sectorChunk * (sectorStride - entry.sectorChunk);
-                nextBase = (entry.endSec / sectorStride + 1 + entry.nullTermination) * sectorStride;
+                const int quotChunks  = sectorCount / entry.sectorChunk;
+                const int remChunks   = sectorCount % entry.sectorChunk;
+                const int nullTerm    = (remChunks + entry.nullTermination) / entry.sectorChunk;
+                entry.endSec          = entry.begSec + quotChunks * sectorStride + remChunks;
+                nextBase              = (entry.endSec / sectorStride + 1 + nullTerm) * sectorStride;
             }
 
             for (int i = 0; i < entry.sectorChunk; ++i)
@@ -185,6 +188,7 @@ public:
             activeFiles++;
             auto &slot = slots[index];
             slot.entry = entry;
+            slot.entry.nullTermination = ((entry.sectorCount - 1) % entry.sectorChunk + entry.nullTermination) / entry.sectorChunk;
             slot.inputFile = fopen(slot.entry.filePath.string().c_str(), "rb");
             setvbuf(slot.inputFile, slot.stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
         };
