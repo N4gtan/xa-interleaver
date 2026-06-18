@@ -259,21 +259,18 @@ private:
                 else
                     goto END;
             }
+            else if (isNull())
+            {
+                entry.nullTermination++;
+                memcpy(&entry.nullSubheader, &buffer[FILENUM_OFFSET], sizeof(entry.nullSubheader));
+            }
+            else if (eof || entry.channel != buffer[CHANNEL_OFFSET])
+                goto END;
             else
             {
-                if (isNull())
-                {
-                    entry.nullTermination++;
-                    memcpy(&entry.nullSubheader, &buffer[FILENUM_OFFSET], sizeof(entry.nullSubheader));
-                }
-                else if (eof || entry.channel != buffer[CHANNEL_OFFSET])
-                    goto END;
-                else
-                {
-                    eof = buffer[SUBMODE_OFFSET] & 0x80; // 0x80 = EOF_MASK
-                    if (silent)
-                        silent = isSilent();
-                }
+                eof = buffer[SUBMODE_OFFSET] & 0x80; // 0x80 = EOF_MASK
+                if (silent)
+                    silent = isSilent();
             }
         } while (true);
 
