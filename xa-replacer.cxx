@@ -23,33 +23,60 @@ int check_file(FILE *fp, const std::filesystem::path &path, uintmax_t &fileSize,
     }
 
     fprintf(stderr, "Error: File \"%s\" is not aligned to 2336/2352 bytes.\n", path.filename().string().c_str());
-    exit(1);
+    exit(EXIT_FAILURE);
 }
 
 int main(int argc, char *argv[])
 {
-    if (argc < 4)
+    if (argc < 3)
     {
         printf("xa-replacer " VER " by N4gtan\n\n"
                " Usage: xa-replacer <target> <source> <sector>\n\n"
                "Target: File to be modified (in-place)\n"
                "Source: Deinterleaved XA file to inject\n"
-               "Sector: Starting LBA of the stream to replace\n");
-        return 0;
+               "Sector: Starting LBA of the track to replace\n"
+               "        (If omitted, a track list will be displayed to choose from)\n");
+        return EXIT_SUCCESS;
     }
 
     const std::filesystem::path tgtPath = argv[1];
     const std::filesystem::path srcPath = argv[2];
-    const int sector = atoi(argv[3]);
 
     const std::vector<deinterleaver::FileInfo> entries = std::move(deinterleaver(tgtPath).entries);
-    const auto it = std::find_if(entries.begin(), entries.end(), [sector](const auto &entry) { return entry.begSec == sector; });
-    if (it == entries.end())
+    if (errno)
+        return EXIT_FAILURE;
+
+    const auto &entry = [&]() -> const deinterleaver::FileInfo &
     {
-        fprintf(stderr, "Error: There is no stream that starts at sector %d.\n", sector);
-        return 1;
-    }
-    const auto &entry = *it;
+        if (argc >= 4)
+        {
+            int sector = 0;
+            const int ret = sscanf(argv[3], "%d", &sector);
+            const auto it = std::find_if(entries.begin(), entries.end(), [sector](const auto &entry) { return entry.begSec == sector; });
+            if (ret == 0 || it == entries.end())
+            {
+                fprintf(stderr, "Error: There is no stream that starts at sector %s.\n", argv[3]);
+                exit(EXIT_FAILURE);
+            }
+            return *it;
+        }
+        else
+        {
+            size_t track = 0;
+            printf("Track AudioSectors NullSectors Beg-End_AudioSector\n");
+            for (const auto &entry : entries)
+                printf("#%-5zu%-13d%-12d%d-%d\n", track++, entry.sectorCount - entry.nullTermination, entry.nullTermination, entry.begSec, entry.endSec);
+
+            printf("Enter track number: #");
+            const int ret = scanf("%zu", &track);
+            if (ret == 0 || track >= entries.size())
+            {
+                fprintf(stderr, "Error: That was not a valid track.\n");
+                exit(EXIT_FAILURE);
+            }
+            return entries[track];
+        }
+    }();
 
     uint8_t buffer[CD_SECTOR_SIZE] {0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00};
     std::unique_ptr<FILE, decltype(&fclose)> tgtFile(fopen(tgtPath.string().c_str(), "r+b"), &fclose);
@@ -67,14 +94,14 @@ int main(int argc, char *argv[])
     if (srcSectorCount > entry.sectorCount)
     {
         fprintf(stderr, "Error: Source exceeds target stream size by %d sector(s).\n", srcSectorCount - entry.sectorCount);
-        return 1;
+        return EXIT_FAILURE;
     }
 
     // Check eof bit and reset file pointers
     fseeko(tgtFile.get(), static_cast<int64_t>(entry.endSec) * tgtSectorSize + dataOffset + 2, SEEK_SET);
     uint8_t eofBit = fgetc(tgtFile.get()) & 0x80;
     fseeko(srcFile.get(), 0, SEEK_SET);
-    fseeko(tgtFile.get(), static_cast<int64_t>(sector) * tgtSectorSize + dataOffset, SEEK_SET);
+    fseeko(tgtFile.get(), static_cast<int64_t>(entry.begSec) * tgtSectorSize + dataOffset, SEEK_SET);
 
     // Write data
     auto processSector = [&](auto tag) -> void
@@ -117,5 +144,5 @@ int main(int argc, char *argv[])
     }
 
     printf("Process complete.\n");
-    return 0;
+    return EXIT_SUCCESS;
 }
