@@ -195,6 +195,7 @@ private:
     intmax_t parse(FILE *inputFile, intmax_t currentSector, std::vector<bool> &processedSectors)
     {
         FileInfo entry{};
+        entry.sectorCount++;
         entry.filenum = buffer[FILENUM_OFFSET];
         entry.channel = buffer[CHANNEL_OFFSET];
         entry.begSec  = currentSector;
@@ -204,7 +205,6 @@ private:
         bool eof = buffer[SUBMODE_OFFSET] & 0x80; // 0x80 = EOF_MASK
         bool silent = isSilent();
         do {
-            entry.sectorCount++;
             //entry.endSec = currentSector;
             processedSectors[currentSector++] = true;
             //if (currentSector >= 42185)                                                                              //
@@ -268,6 +268,7 @@ private:
                 goto END;
             else
             {
+                entry.sectorCount++;
                 eof = buffer[SUBMODE_OFFSET] & 0x80; // 0x80 = EOF_MASK
                 if (silent)
                     silent = isSilent();

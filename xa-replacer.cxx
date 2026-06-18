@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
             size_t track = 0;
             printf("Track AudioSectors NullSectors Beg-End_AudioSector\n");
             for (const auto &entry : entries)
-                printf("#%-5zu%-13d%-12d%d-%d\n", track++, entry.sectorCount - entry.nullTermination, entry.nullTermination, entry.begSec, entry.endSec);
+                printf("#%-5zu%-13d%-12d%d-%d\n", track++, entry.sectorCount, entry.nullTermination, entry.begSec, entry.endSec);
 
             printf("Enter track number: #");
             const int ret = scanf("%zu", &track);
@@ -91,9 +91,9 @@ int main(int argc, char *argv[])
 
     // Validate target available space
     const int srcSectorCount = srcSize / srcSectorSize;
-    if (srcSectorCount > entry.sectorCount)
+    if (srcSectorCount > entry.sectorCount + entry.nullTermination)
     {
-        fprintf(stderr, "Error: Source exceeds target stream size by %d sector(s).\n", srcSectorCount - entry.sectorCount);
+        fprintf(stderr, "Error: Source exceeds target stream size by %d sector(s).\n", srcSectorCount - (entry.sectorCount + entry.nullTermination));
         return EXIT_FAILURE;
     }
 
@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
     processSector(std::true_type{});
 
     // Null filler
-    int sectorsToFill = (entry.sectorCount - entry.nullTermination) - srcSectorCount;
+    int sectorsToFill = entry.sectorCount - srcSectorCount;
     if (sectorsToFill > 0)
     {
         printf("Warning: Source is smaller than target stream size by %d sector(s).\n"
