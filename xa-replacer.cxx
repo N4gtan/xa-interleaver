@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
     if (argc < 3)
     {
         printf("xa-replacer " VER " by N4gtan\n\n"
-               " Usage: xa-replacer <target> <source> <sector>\n\n"
+               " Usage: xa-replacer <target> <source> [sector]\n\n"
                "Target: File to be modified (in-place)\n"
                "Source: Deinterleaved XA file to inject\n"
                "Sector: Starting LBA of the track to replace\n"

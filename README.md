@@ -19,10 +19,10 @@
 
 ## Usage
 ```
-xa-interleaver <input> <stride> <size> <output>
+xa-interleaver <input> [stride] [size] [output]
 ```
 ```
-xa-deinterleaver <input> <size> <output>
+xa-deinterleaver <input> [size] [output]
 ```
 
 ### Commands
@@ -39,9 +39,9 @@ Required:
 ```
 Optional:
 ```
-<stride>    (Only for interleave) Stride of sectors to interleave, 2/4/8/16/32. Defaults to 8
-<size>      Optional output file sector size (2336 or 2352). Defaults to input file (or the first file in the manifest) sector size
-<output>    Optional output dir/file path. Defaults to input dir/file path
+[stride]    (Only for interleave) Stride of sectors to interleave, 2/4/8/16/32. Defaults to 8
+[size]      Optional output file sector size (2336 or 2352). Defaults to input file (or the first file in the manifest) sector size
+[output]    Optional output dir/file path. Defaults to input dir/file path
 ```
 Examples:
 ```
@@ -51,7 +51,7 @@ xa-deinterleaver path/to/input.xa 2352 path/to/output/
 
 ### xa-replacer
 ```
-xa-replacer <target> <source> <sector>
+xa-replacer <target> <source> [sector]
 Example:
 xa-replacer path/to/target.str path/to/source.xa 7
 ```
