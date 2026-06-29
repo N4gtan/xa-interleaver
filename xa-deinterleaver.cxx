@@ -9,7 +9,7 @@ int main(int argc, char *argv[])
                " Usage: xa-deinterleaver <input> [size] [output]\n\n"
                " Input: XA interleaved file\n"
                "  Size: Optional output file sector size (2336 or 2352). Defaults to input file sector size\n"
-               "Output: Optional output directory path. Defaults to input directory path\n");
+               "Output: Optional output directory path. Defaults to input file path\n");
         return EXIT_SUCCESS;
     }
 

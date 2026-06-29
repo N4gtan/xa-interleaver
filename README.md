@@ -27,7 +27,7 @@ xa-deinterleaver <input> [size] [output]
 
 ### Commands
 >[!CAUTION]
->All arguments are positional so, to set an `<output>`, you need to set the previous ones.
+>All arguments are positional so, to set an `[output]`, you need to set the previous ones.
 
 >[!TIP]
 >On Windows, can simply drag and drop a supported file into an exe to run it with the default options.
@@ -41,7 +41,7 @@ Optional:
 ```
 [stride]    (Only for interleave) Stride of sectors to interleave, 2/4/8/16/32. Defaults to 8
 [size]      Optional output file sector size (2336 or 2352). Defaults to input file (or the first file in the manifest) sector size
-[output]    Optional output dir/file path. Defaults to input dir/file path
+[output]    Optional output dir/file path. Defaults to input file path
 ```
 Examples:
 ```
