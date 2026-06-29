@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
             size_t track = 0;
             printf("Track AudioSectors NullSectors Beg-End_AudioSector\n");
             for (const auto &entry : entries)
-                printf("#%-5zu%-13d%-12d%d-%d\n", track++, entry.sectorCount, entry.nullTermination, entry.begSec, entry.endSec);
+                printf("#%-5zu%-13d%-12d%d-%d\n", track++, entry.sectorCount, entry.nullTrailing, entry.begSec, entry.endSec);
 
             printf("Enter track number: #");
             const int ret = scanf("%zu", &track);
@@ -91,9 +91,9 @@ int main(int argc, char *argv[])
 
     // Validate target available space
     const int srcSectorCount = srcSize / srcSectorSize;
-    if (srcSectorCount > entry.sectorCount + entry.nullTermination)
+    if (srcSectorCount > entry.sectorCount + entry.nullTrailing)
     {
-        fprintf(stderr, "Error: Source exceeds target stream size by %d sector(s).\n", srcSectorCount - (entry.sectorCount + entry.nullTermination));
+        fprintf(stderr, "Error: Source exceeds target stream size by %d sector(s).\n", srcSectorCount - (entry.sectorCount + entry.nullTrailing));
         return EXIT_FAILURE;
     }
 

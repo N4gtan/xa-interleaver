@@ -20,7 +20,7 @@ public:
         int sectorChunk = 1;
         int sectorCount;
         int sectorStride;
-        int nullTermination;
+        int nullTrailing;
         uint8_t filenum;
         uint8_t channel;
         alignas(int) uint8_t nullSubheader[4];
@@ -252,16 +252,16 @@ private:
 
             if (entry.filenum != buffer[FILENUM_OFFSET])
                 goto END;
-            else if (entry.nullTermination > 0)
+            else if (entry.nullTrailing > 0)
             {
                 if (entry.nullSubheader[1] == buffer[CHANNEL_OFFSET] && (entry.nullSubheader[2] | 0x80) == (buffer[SUBMODE_OFFSET] | 0x80) && isNull())
-                    entry.nullTermination++;
+                    entry.nullTrailing++;
                 else
                     goto END;
             }
             else if (isNull())
             {
-                entry.nullTermination++;
+                entry.nullTrailing++;
                 memcpy(&entry.nullSubheader, &buffer[FILENUM_OFFSET], sizeof(entry.nullSubheader));
             }
             else if (eof || entry.channel != buffer[CHANNEL_OFFSET])
@@ -276,7 +276,7 @@ private:
         } while (true);
 
     END:
-        const int nullSectors = entry.nullTermination / entry.sectorChunk * entry.sectorStride + entry.nullTermination;
+        const int nullSectors = entry.nullTrailing / entry.sectorChunk * entry.sectorStride + entry.nullTrailing;
         entry.endSec = currentSector - entry.sectorStride - nullSectors - 1;
 
         if (entry.sectorStride > 0)
@@ -303,11 +303,11 @@ private:
             return;
         }
 
-        fprintf(manifest, "chunk,type,file,null_termination,xa_file_number,xa_channel_number" /*",xa_null_subheader"*/ ",sector_beg-end,stride\n");
+        fprintf(manifest, "chunk,type,file,null_trailing,xa_file_number,xa_channel_number" /*",xa_null_subheader"*/ ",sector_beg-end,stride\n");
         for (const FileInfo &entry : entries)
         {
             fprintf(manifest, "%d,%s,%s,%d,%hhu,%hhu" /*",0x%02X%02X%02X%02X"*/ ",%d-%d,%d\n", entry.sectorChunk, type,
-                    entry.fileName.c_str(), entry.nullTermination, entry.filenum, entry.channel,
+                    entry.fileName.c_str(), entry.nullTrailing, entry.filenum, entry.channel,
                     /*entry.nullSubheader[0], entry.nullSubheader[1], entry.nullSubheader[2], entry.nullSubheader[3],*/
                     entry.begSec, entry.endSec, entry.sectorChunk + entry.sectorStride);
         }

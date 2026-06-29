@@ -27,7 +27,7 @@ public:
         int sectorChunk = 1;
         int sectorCount;
         int sectorSize;
-        int nullTermination;
+        int nullTrailing;
         std::optional<uint8_t> filenum;
         std::optional<uint8_t> channel;
         alignas(int) uint8_t nullSubheader[4];
@@ -131,7 +131,7 @@ public:
 
                 if ((field = strtok_r(NULL, ",", &saveptr)))
                 {
-                    entry.nullTermination = atoi(field);
+                    entry.nullTrailing = atoi(field);
                     if ((field = strtok_r(NULL, ",", &saveptr)))
                     {
                         entry.filenum = atoi(field);
@@ -153,9 +153,9 @@ public:
                 const int sectorCount = entry.sectorCount - 1;
                 const int quotChunks  = sectorCount / entry.sectorChunk;
                 const int remChunks   = sectorCount % entry.sectorChunk;
-                const int nullTerm    = (remChunks + entry.nullTermination) / entry.sectorChunk;
+                const int nullTrail   = (remChunks + entry.nullTrailing) / entry.sectorChunk;
                 entry.endSec          = entry.begSec + quotChunks * sectorStride + remChunks;
-                nextBase              = (entry.endSec / sectorStride + 1 + nullTerm) * sectorStride;
+                nextBase              = (entry.endSec / sectorStride + 1 + nullTrail) * sectorStride;
             }
 
             for (int i = 0; i < entry.sectorChunk; ++i)
@@ -188,7 +188,7 @@ public:
             activeFiles++;
             auto &slot = slots[index];
             slot.entry = entry;
-            slot.entry.nullTermination = ((entry.sectorCount - 1) % entry.sectorChunk + entry.nullTermination) / entry.sectorChunk;
+            slot.entry.nullTrailing = ((entry.sectorCount - 1) % entry.sectorChunk + entry.nullTrailing) / entry.sectorChunk;
             slot.inputFile = fopen(slot.entry.filePath.string().c_str(), "rb");
             setvbuf(slot.inputFile, slot.stdiBuf.get(), _IOFBF, STDIO_IOFBF_SIZE);
         };
@@ -240,7 +240,7 @@ public:
 
                 if (inputFile != nullptr &&
                     sectorCount >= entry.sectorCount &&
-                    entry.nullTermination-- <= 0)
+                    entry.nullTrailing-- <= 0)
                 {
                     activeFiles--;
                     sectorCount = 0;
@@ -306,7 +306,7 @@ private:
         if (*reinterpret_cast<int *>(entry.nullSubheader) != 0)
             return;
         entry.nullSubheader[0] = entry.filenum.value_or(emptyBuffer[FILENUM_OFFSET]);
-        //entry.nullSubheader[1] = entry.nullTermination >= 0 ? entry.channel.value_or(0) : 0;
+        //entry.nullSubheader[1] = entry.nullTrailing >= 0 ? entry.channel.value_or(0) : 0;
         //entry.nullSubheader[2] = 0x48;
         //entry.nullSubheader[3] = 0x00;
     }
