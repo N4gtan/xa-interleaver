@@ -137,7 +137,7 @@ public:
                         entry.filenum = atoi(field);
                         if ((field = strtok_r(NULL, ",", &saveptr)))
                         {
-                            entry.channel = atoi(field);
+                            entry.channel = std::tolower(static_cast<uint8_t>(*field)) == 'a' ? idle : atoi(field);
                             while ((field = strtok_r(NULL, ",", &saveptr)))
                             {
                                 if (strncasecmp(field, "0x", 2) != 0)

@@ -63,15 +63,15 @@ The manifest text file must be in the following format:
 ```
 chunk,type,file,null_trailing,xa_file_number,xa_channel_number,xa_null_subheader
 ```
-| Field             | Value            | Description                                                                                     |
-|-------------------|------------------|-------------------------------------------------------------------------------------------------|
-|`chunk`            |`1`-`[stride]`    |Number of sectors per chunk within a stride. Cannot exceed the `[stride]` command value.         |
-|`type`             |`xa` `xacd` `null`|`xa` for 2336-sector file. `xacd` for 2352-sector file. `null` for empty sectors.                |
-|`file`             |`my file.xa`      |File name or path without quotation marks (can be relative or absolute). Omitted for `null`.     |
-|`null_trailing`    |`0` or more       |***OPTIONAL*** number of trailing null sectors after the end of the file. Defaults to `0`.       |
-|`xa_file_number`   |`0`-`255`         |***OPTIONAL*** subheader file number identifier. Defaults to `file` original value (RAW copy).   |
-|`xa_channel_number`|`0`-`254`         |***OPTIONAL*** subheader channel number identifier. Defaults to `file` original value (RAW copy).|
-|`xa_null_subheader`|`0xFFFFFFFF`      |***OPTIONAL*** subheader value for `null_trailing` sectors. Defaults to 0x`xa_file_number`000000.|
+| Field             | Value            | Description                                                                                                  |
+|-------------------|------------------|--------------------------------------------------------------------------------------------------------------|
+|`chunk`            |`1`-`[stride]`    |Number of sectors per chunk within a stride. Cannot exceed the `[stride]` command value.                      |
+|`type`             |`xa` `xacd` `null`|`xa` for 2336-sector file. `xacd` for 2352-sector file. `null` for empty sectors.                             |
+|`file`             |`my file.xa`      |File name or path without quotation marks (can be relative or absolute). Omitted for `null`.                  |
+|`null_trailing`    |`0` or more       |***OPTIONAL*** number of trailing null sectors after the end of the file. Defaults to `0`.                    |
+|`xa_file_number`   |`0`-`255`         |***OPTIONAL*** subheader file number identifier. Defaults to `file` original value (RAW copy).                |
+|`xa_channel_number`|`0`-`254` or `a`  |***OPTIONAL*** subheader channel number identifier (`a` = auto). Defaults to `file` original value (RAW copy).|
+|`xa_null_subheader`|`0xFFFFFFFF`      |***OPTIONAL*** subheader value for `null_trailing` sectors. Defaults to 0x`xa_file_number`000000.             |
 
 >[!NOTE]
 >Deinterleaver's `.csv` fields, `sector_beg-end` and `stride`, are purely informative and do not affect interleaving.
@@ -79,40 +79,42 @@ chunk,type,file,null_trailing,xa_file_number,xa_channel_number,xa_null_subheader
 >Typical `chunk` value is 1 for audio and 7 for video streams.
 >
 >Typical `null_trailing` value is 15 or more to account for CD-ROM command latency and prevent drive overread.
+>
+>Typical `xa_file_number` value is the same across all files (e.g., 1).
 ><details>
 ><summary>Example.csv manifest for Megaman X6 BGM.XA:</summary>
 >
 >```
->1,xa,BGM_00.xa,20,1,0
->1,xa,BGM_01.xa,20,1,1
->1,xa,BGM_02.xa,20,1,2
->1,xa,BGM_03.xa,20,1,3
->1,xa,BGM_04.xa,20,1,4
->1,xa,BGM_05.xa,20,1,5
->1,xa,BGM_06.xa,20,1,6
->1,xa,BGM_07.xa,20,1,7
->1,xa,BGM_08.xa,20,1,7
->1,xa,BGM_09.xa,20,1,6
->1,xa,BGM_10.xa,20,1,5
->1,xa,BGM_11.xa,20,1,4
->1,xa,BGM_12.xa,20,1,3
->1,xa,BGM_13.xa,20,1,2
->1,xa,BGM_14.xa,20,1,1
->1,xa,BGM_15.xa,20,1,0
->1,xa,BGM_16.xa,20,1,4
->1,xa,BGM_17.xa,20,1,6
->1,xa,BGM_18.xa,20,1,5
->1,xa,BGM_19.xa,20,1,3
->1,xa,BGM_20.xa,20,1,7
->1,xa,BGM_21.xa,20,1,2
->1,xa,BGM_22.xa,20,1,1
->1,xa,BGM_23.xa,20,1,0
->1,xa,BGM_24.xa,20,1,0
->1,xa,BGM_25.xa,20,1,1
->1,xa,BGM_26.xa,20,1,1
->1,xa,BGM_27.xa,20,1,1
->1,xa,BGM_28.xa,20,1,0
->1,xa,BGM_29.xa,20,1,1
+>1,xa,BGM_00.xa,20,1,a
+>1,xa,BGM_01.xa,20,1,a
+>1,xa,BGM_02.xa,20,1,a
+>1,xa,BGM_03.xa,20,1,a
+>1,xa,BGM_04.xa,20,1,a
+>1,xa,BGM_05.xa,20,1,a
+>1,xa,BGM_06.xa,20,1,a
+>1,xa,BGM_07.xa,20,1,a
+>1,xa,BGM_08.xa,20,1,a
+>1,xa,BGM_09.xa,20,1,a
+>1,xa,BGM_10.xa,20,1,a
+>1,xa,BGM_11.xa,20,1,a
+>1,xa,BGM_12.xa,20,1,a
+>1,xa,BGM_13.xa,20,1,a
+>1,xa,BGM_14.xa,20,1,a
+>1,xa,BGM_15.xa,20,1,a
+>1,xa,BGM_16.xa,20,1,a
+>1,xa,BGM_17.xa,20,1,a
+>1,xa,BGM_18.xa,20,1,a
+>1,xa,BGM_19.xa,20,1,a
+>1,xa,BGM_20.xa,20,1,a
+>1,xa,BGM_21.xa,20,1,a
+>1,xa,BGM_22.xa,20,1,a
+>1,xa,BGM_23.xa,20,1,a
+>1,xa,BGM_24.xa,20,1,a
+>1,xa,BGM_25.xa,20,1,a
+>1,xa,BGM_26.xa,20,1,a
+>1,xa,BGM_27.xa,20,1,a
+>1,xa,BGM_28.xa,20,1,a
+>1,xa,BGM_29.xa,20,1,a
 >```
 ></details>
 

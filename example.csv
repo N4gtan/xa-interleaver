@@ -1,8 +1,24 @@
-1,xa,XA raw.xa,0
-1,xa,XA custom.xa,1,2,3
+# Example manifest
+# Uses 1 chunk, assumes 2336 sector size, file "XA raw.xa", no trailing null sectors, copies file's original filenum and channel.
+1,xa,XA raw.xa
+
+# Uses 7 chunks, assumes 2336 sector size, file "XA custom.xa", no trailing null sectors, filenum = 1, channel = 2.
+7,xa,XA custom.xa,0,1,2
+
+# Uses 1 chunk, null sectors padding
 1,null
-1,xacd,CD raw.xa,4
-1,xacd,CD custom.xa,5,6,7
+
+# Uses 1 chunk, assumes 2352 sector size, file "CD raw.xa", 3 trailing null sectors, copies file's original filenum and channel.
+1,xacd,CD raw.xa,3
+
+# Uses 1 chunk, assumes 2352 sector size, file "CD custom.xa", 4 trailing null sectors, filenum = 5, channel = automatic (a).
+1,xacd,CD custom.xa,4,5,a
+
+# Uses 1 chunk, null sectors padding
 1,null
+
+# Uses 1 chunk, null sectors padding
 1,null
+
+# Uses 1 chunk, null sectors padding
 1,null
